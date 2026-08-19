@@ -21,6 +21,11 @@ jobs:
       # tags the release, writes CHANGELOG.md and bumps the version in
       # pyproject.toml. The bump is derived from the Conventional Commit
       # types since the last release -- fix: patch, feat: minor, ! : major.
+      # Manifest mode. The `python` release type alone only knows setup.py,
+      # setup.cfg and Poetry-style pyproject files -- it does not recognise
+      # PEP 621 `[project] version`, so the version was never bumped. The
+      # explicit toml updater in release-please-config.json fixes that.
       - uses: googleapis/release-please-action@v5
         with:
-          release-type: python
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
