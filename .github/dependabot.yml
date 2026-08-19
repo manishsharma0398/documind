@@ -6,6 +6,11 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci"
+    # Action bumps are low-risk and tedious to review one at a time. One PR
+    # per week for all of them, instead of one per action.
+    groups:
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: uv
     directory: /
@@ -13,3 +18,5 @@ updates:
       interval: weekly
     commit-message:
       prefix: "build"
+    # Deliberately ungrouped: a library bump that breaks something is far
+    # easier to bisect when it is alone in its own PR.
