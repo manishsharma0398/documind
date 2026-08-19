@@ -1,0 +1,26 @@
+name: release-please
+
+on:
+  push:
+    branches: [master]
+
+# Needed to open the release PR and to create the tag and GitHub release.
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      # Maintains a rolling "chore(master): release X.Y.Z" PR. Merging it
+      # tags the release, writes CHANGELOG.md and bumps the version in
+      # pyproject.toml. The bump is derived from the Conventional Commit
+      # types since the last release -- fix: patch, feat: minor, ! : major.
+      - uses: googleapis/release-please-action@v4
+        with:
+          release-type: python

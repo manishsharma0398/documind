@@ -149,6 +149,31 @@ uv run pre-commit run --all-files
 
 ---
 
+## Versioning and releases
+
+Versions are derived, never hand-edited.
+
+**Branch builds** get a SemVer pre-release identifier and a PEP 440 equivalent, so the same
+commit has a valid identifier for both container tags and Python packaging:
+
+| Branch | Commit | SemVer | PEP 440 |
+|---|---|---|---|
+| `feat/hybrid-search` | 1st | `0.1.0-hybrid-search.1` | `0.1.0.dev1+hybrid.search` |
+| `feat/hybrid-search` | 3rd | `0.1.0-hybrid-search.3` | `0.1.0.dev3+hybrid.search` |
+| `master` | — | `0.1.0` | `0.1.0` |
+
+The counter is `git rev-list --count origin/master..HEAD` — the commits the branch adds.
+Deriving it from git rather than a CI counter keeps it reproducible from any clone, with no
+build-server state involved. CI validates both strings against the official SemVer regex and
+PEP 440 before anything downstream consumes them.
+
+**Releases** are automated with [release-please](https://github.com/googleapis/release-please).
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/), which
+determines the bump — `fix:` patch, `feat:` minor, `!` major. A rolling release PR
+accumulates the changelog; merging it tags the version and bumps `pyproject.toml`. The
+convention is enforced by a `commit-msg` hook, since a malformed message is only fixable by
+rewriting history once pushed.
+
 ## Stack
 
 Python 3.13 · FastAPI · Qdrant · LangChain · OpenAI · Pydantic · uv

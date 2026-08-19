@@ -5,6 +5,10 @@
 # every hook there needs `--project services/upload` and repo-root-relative path
 # args. Here pyproject.toml sits at the repo root, which is also pre-commit's
 # cwd, so the plain commands resolve correctly.
+# `pre-commit install` alone only wires the pre-commit stage; the commit-msg
+# hook below would then silently never run.
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
@@ -13,6 +17,15 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
+
+  # Conventional Commits are what release-please reads to decide the version
+  # bump. Enforced at commit time, because a bad message is only fixable by
+  # rewriting history once it has been pushed.
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
 
   - repo: local
     hooks:

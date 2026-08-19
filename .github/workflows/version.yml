@@ -1,0 +1,108 @@
+name: version
+
+on:
+  push:
+    branches: ["**"]
+  # Callable so ci.yml can consume the version instead of recomputing it.
+  workflow_call:
+    outputs:
+      semver:
+        description: SemVer 2.0.0 version for this ref
+        value: ${{ jobs.version.outputs.semver }}
+      pep440:
+        description: PEP 440 version for this ref
+        value: ${{ jobs.version.outputs.pep440 }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.v.outputs.semver }}   # SemVer 2.0.0  -> 0.1.0-test-mine-ticket.1
+      pep440: ${{ steps.v.outputs.pep440 }}   # PEP 440       -> 0.1.0.dev1+test.mine.ticket
+      slug: ${{ steps.v.outputs.slug }}
+      build: ${{ steps.v.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # rev-list needs real history. The default checkout is a depth-1
+          # shallow clone, where the commit count is always 1.
+          fetch-depth: 0
+
+      - id: v
+        name: Compute version
+        run: |
+          set -euo pipefail
+
+          BASE="${{ github.event.repository.default_branch }}"
+          REF="${GITHUB_REF_NAME}"
+
+          # Base version is the single source of truth, read from the project
+          # metadata rather than duplicated in CI.
+          CORE="$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+
+          # feat/test-mine-ticket -> test-mine-ticket
+          # SemVer pre-release identifiers allow [0-9A-Za-z-] only.
+          SLUG="${REF##*/}"
+          SLUG="$(printf '%s' "$SLUG" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+
+          if [ "$REF" = "$BASE" ]; then
+            BUILD="$(git rev-list --count HEAD)"
+            SEMVER="$CORE"
+            PEP440="$CORE"
+          else
+            # Commits reachable from HEAD but not from the base branch,
+            # i.e. exactly the commits added on this branch.
+            BUILD="$(git rev-list --count "origin/${BASE}..HEAD")"
+
+            # SemVer: pre-release segment after '-'
+            SEMVER="${CORE}-${SLUG}.${BUILD}"
+
+            # PEP 440: dev release + local version label ('-' normalises to '.')
+            PEP440="${CORE}.dev${BUILD}+$(printf '%s' "$SLUG" | tr '-' '.')"
+          fi
+
+          {
+            echo "slug=$SLUG"
+            echo "build=$BUILD"
+            echo "semver=$SEMVER"
+            echo "pep440=$PEP440"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "::notice title=version::${SEMVER}"
+          {
+            echo "| | |"
+            echo "|---|---|"
+            echo "| SemVer | \`${SEMVER}\` |"
+            echo "| PEP 440 | \`${PEP440}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify both versions are standard-conformant
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, sys
+          semver = "${{ steps.v.outputs.semver }}"
+          pep440 = "${{ steps.v.outputs.pep440 }}"
+
+          # Official regex from semver.org
+          SEMVER_RE = (
+              r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+              r"(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
+              r"(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
+              r"(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
+          )
+          ok = True
+          if not re.match(SEMVER_RE, semver):
+              print(f"::error::not valid SemVer 2.0.0: {semver}"); ok = False
+
+          try:
+              from packaging.version import Version
+              Version(pep440)
+          except Exception as e:
+              print(f"::error::not valid PEP 440: {pep440} ({e})"); ok = False
+
+          sys.exit(0 if ok else 1)
+          PY
