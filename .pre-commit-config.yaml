@@ -1,0 +1,52 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+#
+# Adapted from prasaarit/services/upload. That copy is a monorepo service, so
+# every hook there needs `--project services/upload` and repo-root-relative path
+# args. Here pyproject.toml sits at the repo root, which is also pre-commit's
+# cwd, so the plain commands resolve correctly.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: local
+    hooks:
+      - id: uv-lock
+        name: uv-lock
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: black
+        name: black
+        entry: uv run --group lint black
+        language: system
+        types: [python]
+
+      - id: isort
+        name: isort
+        entry: uv run --group lint isort
+        language: system
+        types: [python]
+
+      - id: flake8
+        name: flake8
+        entry: uv run --group lint flake8
+        language: system
+        pass_filenames: false
+        types: [python]
+        args: ["--max-line-length=88", "src/"]
+
+      - id: bandit
+        name: bandit
+        entry: uv run --group lint bandit
+        language: system
+        pass_filenames: false
+        types: [python]
+        args: ["-r", "src/"]
