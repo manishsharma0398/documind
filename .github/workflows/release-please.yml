@@ -21,6 +21,6 @@ jobs:
       # tags the release, writes CHANGELOG.md and bumps the version in
       # pyproject.toml. The bump is derived from the Conventional Commit
       # types since the last release -- fix: patch, feat: minor, ! : major.
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         with:
           release-type: python
