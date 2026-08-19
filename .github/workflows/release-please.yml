@@ -26,6 +26,38 @@ jobs:
       # PEP 621 `[project] version`, so the version was never bumped. The
       # explicit toml updater in release-please-config.json fixes that.
       - uses: googleapis/release-please-action@v5
+        id: rp
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # uv.lock records the project's OWN version, so a release bump desyncs it
+      # from pyproject.toml and `uv sync --locked` then fails on the release PR.
+      # release-please ships no updater for uv.lock, so regenerate it on the
+      # release branch. This pushes a second commit, which re-runs the PR
+      # checks -- they pass on that second run.
+      - uses: actions/checkout@v7
+        if: ${{ steps.rp.outputs.pr }}
+        with:
+          ref: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
+
+      - uses: astral-sh/setup-uv@v7
+        if: ${{ steps.rp.outputs.pr }}
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Sync uv.lock with the released version
+        if: ${{ steps.rp.outputs.pr }}
+        run: |
+          set -euo pipefail
+          uv lock
+          if git diff --quiet -- uv.lock; then
+            echo "uv.lock already in sync"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add uv.lock
+          git commit -m "chore: sync uv.lock with released version"
+          git push
