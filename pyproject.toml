@@ -1,7 +1,7 @@
 [project]
 name = "documind"
 version = "0.1.0"
-description = "Add your description here"
+description = "Retrieval-augmented Q&A service for large personal knowledge bases"
 readme = "README.md"
 authors = [{ name = "Manish Sharma", email = "manish.sharma0398@gmail.com" }]
 requires-python = ">=3.13"
