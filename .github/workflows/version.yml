@@ -25,7 +25,7 @@ jobs:
       slug: ${{ steps.v.outputs.slug }}
       build: ${{ steps.v.outputs.build }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # rev-list needs real history. The default checkout is a depth-1
           # shallow clone, where the commit count is always 1.
