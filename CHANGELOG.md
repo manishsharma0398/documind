@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/manishsharma0398/documind/compare/v0.1.1...v0.1.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* sync uv.lock on release and sanitise branch slugs ([#11](https://github.com/manishsharma0398/documind/issues/11)) ([14cbd6a](https://github.com/manishsharma0398/documind/commit/14cbd6a40a797e41377f946b5009031e8d60c9ee))
+
 ## [0.1.1](https://github.com/manishsharma0398/documind/compare/v0.1.0...v0.1.1) (2026-08-19)
 
 
