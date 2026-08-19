@@ -44,9 +44,19 @@ jobs:
           CORE="$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
 
           # feat/test-mine-ticket -> test-mine-ticket
-          # SemVer pre-release identifiers allow [0-9A-Za-z-] only.
+          #
+          # Collapse every run of non-alphanumerics to a single '-'. A plain
+          # per-character substitution leaves doubled separators, and while
+          # SemVer tolerates those, converting '-' to '.' for PEP 440 then
+          # yields '..' -- which is not a valid local version label.
+          # release-please--branches--master was the branch that caught this.
           SLUG="${REF##*/}"
-          SLUG="$(printf '%s' "$SLUG" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+          SLUG="$(printf '%s' "$SLUG" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+          # A branch named entirely in separators would otherwise yield an
+          # empty identifier, which is invalid in both schemes.
+          [ -n "$SLUG" ] || SLUG="branch"
 
           if [ "$REF" = "$BASE" ]; then
             BUILD="$(git rev-list --count HEAD)"
