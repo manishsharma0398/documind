@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .clients.qdrant_client import (
+from .clients.qdrant import (
     close_qdrant_client,
     get_qdrant_client,
 )

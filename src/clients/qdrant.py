@@ -11,7 +11,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from src.utils.logger import logger
+from ..utils.logger import logger
 
 _client: AsyncQdrantClient | None = None
 
