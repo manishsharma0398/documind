@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/manishsharma0398/documind/compare/v0.1.2...v0.2.0) (2026-08-20)
+
+
+### Features
+
+* add async qdrant client with lifespan wiring ([#13](https://github.com/manishsharma0398/documind/issues/13)) ([0c56209](https://github.com/manishsharma0398/documind/commit/0c5620990faa41ba6237d456998894308dd0e1de))
+
 ## [0.1.2](https://github.com/manishsharma0398/documind/compare/v0.1.1...v0.1.2) (2026-08-19)
 
 
