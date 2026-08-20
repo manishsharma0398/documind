@@ -2,13 +2,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from .clients.qdrant_client import (
+    close_qdrant_client,
+    get_qdrant_client,
+)
 from .endpoints.ingest import ingest_router
 from .endpoints.retrieve import retrieve_router
 from .utils.logger import logger
-from .clients.qdrant_client import (
-    get_qdrant_client,
-    close_qdrant_client,
-)
 
 
 @asynccontextmanager
