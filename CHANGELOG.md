@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/manishsharma0398/documind/compare/v0.2.0...v0.3.0) (2026-08-20)
+
+
+### Features
+
+* add filesystem document source with settings and error handling ([#15](https://github.com/manishsharma0398/documind/issues/15)) ([c2133aa](https://github.com/manishsharma0398/documind/commit/c2133aa213079cb6f5748499ec3389d00031a100))
+
 ## [0.2.0](https://github.com/manishsharma0398/documind/compare/v0.1.2...v0.2.0) (2026-08-20)
 
 
