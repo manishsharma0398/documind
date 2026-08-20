@@ -5,7 +5,12 @@ description = "Retrieval-augmented Q&A service for large personal knowledge base
 readme = "README.md"
 authors = [{ name = "Manish Sharma", email = "manish.sharma0398@gmail.com" }]
 requires-python = ">=3.13"
-dependencies = ["fastapi[standard]>=0.141.1", "python-json-logger>=4.2.0"]
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+    "python-dotenv>=1.2.3",
+    "python-json-logger>=4.2.0",
+    "qdrant-client>=1.19.0",
+]
 
 [project.scripts]
 dev = "src.main:app"
