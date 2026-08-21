@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/manishsharma0398/documind/compare/v0.4.0...v0.5.0) (2026-08-21)
+
+
+### Features
+
+* add openai client and map its failures to status codes ([#21](https://github.com/manishsharma0398/documind/issues/21)) ([7d18b70](https://github.com/manishsharma0398/documind/commit/7d18b7060af9f60bdd809e87fb3d6580e46d1d02))
+
 ## [0.4.0](https://github.com/manishsharma0398/documind/compare/v0.3.0...v0.4.0) (2026-08-21)
 
 
