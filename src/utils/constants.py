@@ -79,3 +79,10 @@ TEXT_OVERLAP = int(TOKEN_SIZE * 0.1)
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 MIN_CHUNK_TOKENS = 100
+
+# Must match the embedding model that produces the vectors.
+EMBEDDING_DIMENSIONS: int = 1536
+DEFAULT_TOP_K: int = 3
+
+OPENAI_TIMEOUT: float = 500
+OPENAI_MAX_RETRIES: int = 5

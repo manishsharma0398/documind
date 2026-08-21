@@ -12,26 +12,27 @@ from qdrant_client.models import (
 )
 
 from ..settings import get_settings
+from ..utils.constants import DEFAULT_TOP_K, EMBEDDING_DIMENSIONS
 from ..utils.logger import logger
 
-_client: AsyncQdrantClient | None = None
+_qdrant_client: AsyncQdrantClient | None = None
 
 
 async def get_qdrant_client() -> AsyncQdrantClient:
-    global _client
-    if _client is None:
+    global _qdrant_client
+    if _qdrant_client is None:
         settings = get_settings()
-        _client = AsyncQdrantClient(
+        _qdrant_client = AsyncQdrantClient(
             url=settings.qdrant_url, api_key=settings.qdrant_api_key
         )
-    return _client
+    return _qdrant_client
 
 
 async def close_qdrant_client():
-    global _client
-    if _client is not None:
-        await _client.close()
-        _client = None
+    global _qdrant_client
+    if _qdrant_client is not None:
+        await _qdrant_client.close()
+        _qdrant_client = None
 
 
 async def does_collection_exist(collection_name: str) -> bool:
@@ -56,9 +57,7 @@ async def ensure_collection(collection_name: str, vector_size: int | None = None
 
     logger.info(f"collection {collection_name} doesn't exist creating it...")
     try:
-        await create_collection(
-            collection_name, vector_size or get_settings().embedding_dimensions
-        )
+        await create_collection(collection_name, vector_size or EMBEDDING_DIMENSIONS)
     except UnexpectedResponse as exc:
         if exc.status_code != HTTPStatus.CONFLICT:
             raise
@@ -97,7 +96,7 @@ async def query_collection(
         with_payload=with_payload,
         query_filter=query_filter,
         score_threshold=score_threshold,
-        limit=top_k or get_settings().default_top_k,
+        limit=top_k or DEFAULT_TOP_K,
     )
 
     return points.points
