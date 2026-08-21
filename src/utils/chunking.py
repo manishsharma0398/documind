@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import PurePosixPath
 
@@ -7,7 +8,7 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
 )
 
-from .constants import EMBEDDING_MODEL, TEXT_OVERLAP, TOKEN_SIZE
+from .constants import EMBEDDING_MODEL, MIN_CHUNK_TOKENS, TEXT_OVERLAP, TOKEN_SIZE
 from .models import Chunk, Document
 
 MARKDOWN_EXTS = {".md", ".markdown", ".mdx"}
@@ -23,16 +24,23 @@ SECTION_SEPARATOR = " > "
 # 85 tokens of breadcrumb on every chunk of the section.
 MAX_HEADER_DEPTH = 2
 
-# A piece of a document plus the headers that were in scope where it was cut.
-# split_doc returns these instead of bare strings, because flattening to
-# list[str] is what loses the section association.
-SplitChunk = tuple[str, dict[str, str]]
+# A piece of a document, the headers that were in scope where it was cut, and
+# the breadcrumb built from them. split_doc returns these instead of bare
+# strings, because flattening to list[str] is what loses the section
+# association. The breadcrumb is carried out rather than rebuilt by the caller
+# because split_doc has to build it anyway -- see the budget below.
+SplitChunk = tuple[str, dict[str, str], str | None]
 
 
 @lru_cache(maxsize=1)
-def _token_splitter() -> RecursiveCharacterTextSplitter:
+def _encoding():
+    return tiktoken.encoding_for_model(EMBEDDING_MODEL)
+
+
+@lru_cache(maxsize=None)
+def _token_splitter(chunk_size: int) -> RecursiveCharacterTextSplitter:
     return RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=TOKEN_SIZE,
+        chunk_size=chunk_size,
         chunk_overlap=TEXT_OVERLAP,
         model_name=EMBEDDING_MODEL,
         separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""],
@@ -101,49 +109,86 @@ def with_breadcrumb(text: str, section_path: str | None) -> str:
     return f"{section_path}\n\n{text}"
 
 
-def split_doc(text: str, file_extension: str) -> list[SplitChunk]:
-    token_splitter = _token_splitter()
+def _breadcrumb_tokens(section_path: str | None) -> int:
+    """Tokens with_breadcrumb will prepend, so the splitter can reserve them.
+
+    Measures exactly what gets prefixed, separator included, and returns 0 when
+    nothing will be. Reserving a different amount than is prepended is how
+    TOKEN_SIZE stops being a ceiling.
+    """
+    if not section_path:
+        return 0
+    return len(_encoding().encode(f"{section_path}\n\n"))
+
+
+def split_doc(text: str, file_extension: str, folders: str | None) -> list[SplitChunk]:
     if file_extension.lower() not in MARKDOWN_EXTS:
-        # No headers to carry, but the shape has to match the markdown branch.
-        return [(chunk, {}) for chunk in token_splitter.split_text(text)]
+        # No headers to carry, but the shape has to match the markdown branch:
+        # the folder path is still a breadcrumb, and still has to be reserved.
+        section_path = build_section_path(folders, {})
+        budget = max(
+            MIN_CHUNK_TOKENS,
+            TOKEN_SIZE - _breadcrumb_tokens(section_path),
+        )
+        return [
+            (chunk, {}, section_path)
+            for chunk in _token_splitter(budget).split_text(text)
+        ]
 
     # Header split first so chunks follow the document's structure, then a
     # token split because a section can be far larger than TOKEN_SIZE.
     sections = _markdown_splitter().split_text(text)
-    return [
+    out: list[SplitChunk] = []
+    for section in sections:
         # Copy the metadata: one dict is shared by every chunk of a section,
         # and a shared mutable payload is a bug waiting to happen downstream.
-        (chunk, dict(section.metadata))
-        for section in sections
-        for chunk in token_splitter.split_text(section.page_content)
-    ]
+        headers = dict(section.metadata)
+        section_path = build_section_path(folders, headers)
+        # Per section, never hoisted: each section has a different breadcrumb,
+        # so each gets a different budget. Reserving the breadcrumb here is the
+        # only reason TOKEN_SIZE is a real ceiling -- the alternative is
+        # splitting to TOKEN_SIZE and then prefixing, which overshoots it by
+        # however long the breadcrumb happens to be.
+        #
+        # MIN_CHUNK_TOKENS floors it so a pathological breadcrumb cannot drive
+        # the budget to nothing. It is also coupled to TEXT_OVERLAP: the
+        # splitter rejects an overlap greater than or equal to its chunk size,
+        # so the floor must stay above it.
+        budget = max(
+            MIN_CHUNK_TOKENS,
+            TOKEN_SIZE - _breadcrumb_tokens(section_path),
+        )
+        for chunk in _token_splitter(budget).split_text(section.page_content):
+            out.append((chunk, headers, section_path))
+
+    return out
 
 
-def chunk_docs(docs: list[Document]) -> list[Chunk]:
-    chunks: list[Chunk] = []
-    encoding = tiktoken.encoding_for_model(EMBEDDING_MODEL)
+def chunk_docs(docs: list[Document]) -> Iterator[Chunk]:
+    """Yield chunks one at a time rather than returning a list.
+
+    The consumer embeds and upserts in batches and discards as it goes. Holding
+    every chunk here would be survivable; holding every *embedded* chunk is not,
+    at 1536 floats each. Streaming from this end is what lets that end stay flat.
+    """
     for doc in docs:
         folders = folder_path_of(doc.source)
-        splitted_doc = split_doc(doc.text, doc.file_ext)
-        for i, (chunk, headers) in enumerate(splitted_doc):
-            section = build_section_path(folders, headers)
+        splitted_doc = split_doc(doc.text, doc.file_ext, folders)
+        for i, (chunk, headers, section) in enumerate(splitted_doc):
             text = with_breadcrumb(chunk, section)
-            chunks.append(
-                Chunk(
-                    text=text,
-                    document_id=str(doc.document_id),
-                    source=doc.source,
-                    chunk_index=i,
-                    file_ext=doc.file_ext,
-                    file_name=doc.file_name,
-                    # Counted on the stored text, not the bare chunk: the
-                    # breadcrumb is 10-15% of a 100-token chunk, and every
-                    # number downstream (embedding cost, context budget)
-                    # depends on this being true.
-                    token_count=len(encoding.encode(text)),
-                    headers=headers,
-                    section=section,
-                )
+            yield Chunk(
+                text=text,
+                document_id=str(doc.document_id),
+                source=doc.source,
+                chunk_index=i,
+                file_ext=doc.file_ext,
+                file_name=doc.file_name,
+                # Counted on the stored text, not the bare chunk: the
+                # breadcrumb averages ~29 tokens, about 16% of the corpus, and
+                # every number downstream -- embedding batch sizing, cost,
+                # retrieval context budget -- depends on this being true.
+                total_tokens=len(_encoding().encode(text)),
+                content_tokens=len(_encoding().encode(chunk)),
+                headers=headers,
+                section=section,
             )
-
-    return chunks

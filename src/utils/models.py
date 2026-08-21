@@ -22,7 +22,8 @@ class Chunk(BaseModel):
     file_name: str
     file_ext: str
     document_id: str
-    token_count: int
+    total_tokens: int
+    content_tokens: int
     chunk_index: int
 
     # Markdown headers in scope where this chunk was cut. Sparse: a chunk under
