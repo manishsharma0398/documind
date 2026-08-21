@@ -12,13 +12,10 @@ class Settings(BaseSettings):
 
     qdrant_url: str
     qdrant_api_key: str | None = None
+    openai_api_key: str
 
     # Every ingest request must resolve inside this directory.
     ingest_root: Path = Path(".")
-
-    # Must match the embedding model that produces the vectors.
-    embedding_dimensions: int = 1536
-    default_top_k: int = 3
 
     @field_validator("qdrant_api_key", mode="after")
     @classmethod
