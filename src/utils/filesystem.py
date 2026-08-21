@@ -59,13 +59,18 @@ def get_files_from_folder(
     resolved = directory.resolve()
     if any(part in SKIP_DIRS for part in resolved.parts):
         raise InvalidRequest(f"{dir} is inside an excluded directory")
-    root = ingest_root()
-    if not resolved.is_relative_to(root):
+    # Not named `root`: the walk below rebinds that name, and this value is
+    # still needed inside the loop.
+    ingest_base = ingest_root()
+    if not resolved.is_relative_to(ingest_base):
         raise InvalidRequest(f"{dir} is outside the ingest root")
     docs: list[Document] = []
     skipped = 0
     total_bytes = 0
-    for root, dirs, filenames in directory.walk():
+    # Walk the resolved path, not the caller's: a relative folder_path like
+    # "./" yields relative roots, and relative_to(ingest_base) below needs
+    # an absolute path to subtract.
+    for root, dirs, filenames in resolved.walk():
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for file in filenames:
             if should_skip_file(file):
@@ -99,7 +104,13 @@ def get_files_from_folder(
                     file_ext=path.suffix,
                     file_name=path.name,
                     text=text,
-                    source=str(path.relative_to(directory)),
+                    # Relative to the ingest root, not to the folder this
+                    # request happened to name. Ingesting ~/notes and then
+                    # ~/notes/terraform must produce the same source for the
+                    # same file: it is the delete-by-filter key for idempotent
+                    # re-indexing, the join key for eval scoring, and part of
+                    # the embedded breadcrumb.
+                    source=str(path.relative_to(ingest_base)),
                 )
             )
     if skipped:

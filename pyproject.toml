@@ -7,10 +7,12 @@ authors = [{ name = "Manish Sharma", email = "manish.sharma0398@gmail.com" }]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.141.1",
+    "langchain-text-splitters>=1.1.2",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     "python-json-logger>=4.2.0",
     "qdrant-client>=1.19.0",
+    "tiktoken>=0.14.0",
 ]
 
 [project.scripts]
