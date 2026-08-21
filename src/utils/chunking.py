@@ -1,14 +1,14 @@
 from functools import lru_cache
 from pathlib import PurePosixPath
 
+import tiktoken
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     RecursiveCharacterTextSplitter,
 )
-import tiktoken
 
-from .constants import TOKEN_SIZE, TEXT_OVERLAP, EMBEDDING_MODEL
-from .models import Document, Chunk
+from .constants import EMBEDDING_MODEL, TEXT_OVERLAP, TOKEN_SIZE
+from .models import Chunk, Document
 
 MARKDOWN_EXTS = {".md", ".markdown", ".mdx"}
 MARKDOWN_HEADERS = [("#", "h1"), ("##", "h2"), ("###", "h3"), ("####", "h4")]
