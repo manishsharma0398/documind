@@ -66,3 +66,15 @@ SKIP_NAMES = {
 }
 
 SKIP_SUFFIXES = {".lock"}
+
+# 100 left too little room: the section breadcrumb was ~29% of every embedded
+# chunk, and top_k=3 gave the model ~300 tokens to answer from. At 400 the
+# breadcrumb is ~17% and top_k=3 is ~510 tokens.
+#
+# Chunks come out at ~178 tokens on average, well under this number: the
+# markdown header split runs first, and most sections are shorter than the
+# budget. This is a ceiling, not a target.
+TOKEN_SIZE = 400
+TEXT_OVERLAP = int(TOKEN_SIZE * 0.1)
+
+EMBEDDING_MODEL = "text-embedding-3-small"
