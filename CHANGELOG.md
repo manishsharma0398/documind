@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/manishsharma0398/documind/compare/v0.3.0...v0.4.0) (2026-08-21)
+
+
+### Features
+
+* header-aware chunking with section breadcrumbs ([#17](https://github.com/manishsharma0398/documind/issues/17)) ([077d860](https://github.com/manishsharma0398/documind/commit/077d86093717d68fd528bd18c90f18ab22839189))
+
+
+### Bug Fixes
+
+* reserve breadcrumb tokens so TOKEN_SIZE is a real ceiling ([#19](https://github.com/manishsharma0398/documind/issues/19)) ([e2dd3cf](https://github.com/manishsharma0398/documind/commit/e2dd3cff30300d1c19df9b915837e995217d788b))
+* stop repeating section headings inside the chunk ([#20](https://github.com/manishsharma0398/documind/issues/20)) ([fffd9e1](https://github.com/manishsharma0398/documind/commit/fffd9e15a74a86d884fcc33740d3d04ab5f52d67))
+
 ## [0.3.0](https://github.com/manishsharma0398/documind/compare/v0.2.0...v0.3.0) (2026-08-20)
 
 
