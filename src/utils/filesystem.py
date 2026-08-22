@@ -107,13 +107,8 @@ def read_text_file(path: Path) -> str | None:
 def is_excluded(source: str, patterns: list[str]) -> bool:
     """True when `source` matches any caller-supplied glob.
 
-    Corpus policy, not service policy: what belongs in an index is the
-    caller's decision, so the patterns arrive on the request rather than
-    living in SKIP_NAMES. That list is for things no corpus should ever hold
-    -- credentials, generated lock files -- and it ships in a public repo.
-
-    full_match rather than match, so a pattern describes the whole path:
-    "CLAUDE.md" is the one at the root, "**/CLAUDE.md" is any of them.
+    full_match, not match, so a pattern describes the whole path: "CLAUDE.md"
+    is the one at the root, "**/CLAUDE.md" is any of them.
     """
     if not patterns:
         return False
@@ -126,6 +121,11 @@ def get_files_from_folder(
     extensions: list[str] | None = None,
     exclude: list[str] | None = None,
 ) -> list[Document]:
+    """Every readable file under `dir` that the caller asked for.
+
+    Refuses anything outside INGEST_ROOT, and skips credentials, vendor
+    directories, binaries and empty files whatever the extensions say.
+    """
     if not dir:
         raise InvalidRequest("path is required")
     directory: Path = Path(dir).expanduser()
@@ -159,10 +159,7 @@ def get_files_from_folder(
             ):
                 continue
             path = Path(root) / file
-            # Computed here rather than at Document construction so an
-            # excluded file is never read off disk. Relative to the ingest
-            # root, so a pattern means the same thing whichever subfolder a
-            # request names.
+            # Before the read, so an excluded file costs no I/O.
             source = str(path.relative_to(ingest_base))
             if is_excluded(source, exclude or []):
                 excluded += 1
@@ -178,12 +175,8 @@ def get_files_from_folder(
             if text is None:
                 skipped += 1
                 continue
-            # An empty or whitespace-only file has nothing to index, and
-            # indexing nothing is not a no-op here: it produces no chunks, so
-            # no points, so the next run finds no hash for the source and
-            # rebuilds it -- forever. Six 0-byte README.md scaffolds in the
-            # test corpus were re-processed on every ingest and could never
-            # converge to skipped.
+            # No chunks means no points means no hash, so it would be
+            # rebuilt on every run forever.
             if not text.strip():
                 empty += 1
                 continue
@@ -200,12 +193,9 @@ def get_files_from_folder(
                     file_ext=path.suffix,
                     file_name=path.name,
                     text=text,
-                    # Relative to the ingest root, not to the folder this
-                    # request happened to name. Ingesting ~/notes and then
-                    # ~/notes/terraform must produce the same source for the
-                    # same file: it is the delete-by-filter key for idempotent
-                    # re-indexing, the join key for eval scoring, and part of
-                    # the embedded breadcrumb.
+                    # Relative to the ingest root, not the requested folder:
+                    # it is the delete key, the eval join key, and part of the
+                    # breadcrumb, so it must not shift between requests.
                     source=source,
                 )
             )

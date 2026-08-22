@@ -20,6 +20,7 @@ _qdrant_client: AsyncQdrantClient | None = None
 
 
 async def get_qdrant_client() -> AsyncQdrantClient:
+    """The shared client, built on first use."""
     global _qdrant_client
     if _qdrant_client is None:
         settings = get_settings()
@@ -30,6 +31,7 @@ async def get_qdrant_client() -> AsyncQdrantClient:
 
 
 async def close_qdrant_client():
+    """Close it, so the next call builds a fresh one."""
     global _qdrant_client
     if _qdrant_client is not None:
         await _qdrant_client.close()
@@ -41,6 +43,7 @@ async def does_collection_exist(collection_name: str) -> bool:
 
 
 async def create_collection(collection_name: str, vector_size: int) -> None:
+    """Create a collection sized for the embedding model."""
     client = await get_qdrant_client()
     await client.create_collection(
         collection_name=collection_name,
@@ -52,11 +55,7 @@ async def create_collection(collection_name: str, vector_size: int) -> None:
 
 
 async def ensure_source_index(collection_name: str) -> None:
-    """Index `source`, the field every delete filters on.
-
-    Without it a filtered delete scans the whole collection. Re-ingest deletes
-    by source, so this is on the hot path for every changed file.
-    """
+    """Index `source`, the field every delete and scroll filters on."""
     client = await get_qdrant_client()
     await client.create_payload_index(
         collection_name=collection_name,
@@ -67,6 +66,10 @@ async def ensure_source_index(collection_name: str) -> None:
 
 
 async def ensure_collection(collection_name: str, vector_size: int | None = None):
+    """Create the collection and its payload index if they are missing.
+
+    A 409 means another worker won the race, which is a success here.
+    """
     if await does_collection_exist(collection_name):
         logger.info(f"collection {collection_name} already exist...")
         await ensure_source_index(collection_name)
@@ -94,13 +97,8 @@ async def scroll_all(
 ) -> list[dict]:
     """Payloads for the matching points, one page at a time.
 
-    with_vectors=False is what makes this cheap: the payloads are a few hundred
-    bytes each, the vectors are 6KB each. Callers want the metadata.
-
-    Pass a filter whenever the caller cares about a known set of points.
-    Unfiltered, the cost is the size of the collection; filtered on an indexed
-    field it is the size of the match, and it stays that way as the collection
-    grows.
+    with_vectors=False is what makes this cheap. Pass a filter when the caller
+    knows which points it wants: unfiltered the cost is the whole collection.
     """
     client = await get_qdrant_client()
     payloads: list[dict] = []
@@ -124,6 +122,7 @@ async def upsert_collection(
     points: list[PointStruct],
     wait: bool = True,
 ) -> UpdateResult:
+    """Write points, replacing any that share an id."""
     client = await get_qdrant_client()
     return await client.upsert(
         collection_name=collection_name,
@@ -140,6 +139,7 @@ async def query_collection(
     score_threshold: float | None = None,
     with_payload: bool = True,
 ) -> list[ScoredPoint]:
+    """Nearest points to `query`, optionally filtered and score-limited."""
     client = await get_qdrant_client()
     points = await client.query_points(
         collection_name,
@@ -158,6 +158,7 @@ async def delete_collection_data(
     criteria: Filter,
     wait: bool = True,
 ) -> UpdateResult:
+    """Delete every point matching `criteria`."""
     client = await get_qdrant_client()
     return await client.delete(
         collection_name,

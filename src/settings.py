@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     @field_validator("qdrant_api_key", mode="after")
     @classmethod
     def blank_key_is_none(cls, value: str | None) -> str | None:
+        """Treat an empty QDRANT_API_KEY as absent rather than present."""
         # QDRANT_API_KEY= in .env arrives as "", which the client reads as
         # "a key is present" and warns about sending it over plain http.
         return value or None
@@ -33,4 +34,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Read once per process."""
     return Settings()  # type: ignore[call-arg]
