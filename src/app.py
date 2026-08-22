@@ -1,4 +1,7 @@
+import re
+import time
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -13,11 +16,12 @@ from .clients.qdrant import (
 from .endpoints.ingest import ingest_router
 from .endpoints.retrieve import retrieve_router
 from .utils.exceptions import InvalidRequest
-from .utils.logger import logger
+from .utils.logger import logger, request_id
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Open the clients on startup, close them on shutdown."""
     # create connections
     await get_qdrant_client()
     await get_openai_client()
@@ -27,15 +31,69 @@ async def lifespan(app: FastAPI):
     await close_openai_client()
 
 
+# Echoed back and written to logs, so a caller cannot inject through it.
+_SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+def _request_id(request: Request) -> str:
+    """Honour an upstream id when it is safe, otherwise mint one."""
+    supplied = request.headers.get("x-request-id", "")
+    if _SAFE_REQUEST_ID.match(supplied):
+        return supplied
+    return uuid4().hex[:12]
+
+
 def create_fast_api_app() -> FastAPI:
+    """Build the app: routers, request logging, and error handling."""
     logger.info("Init App")
     app = FastAPI(title="Documind", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        """Log the request in, and the response out.
+
+        Two lines because a request can take minutes; the first is the only
+        sign the server is working on something. Bodies are never logged.
+        """
+        request_id.set(_request_id(request))
+        route = {"method": request.method, "path": request.url.path}
+        client = request.client.host if request.client else None
+        logger.info("incoming request", extra={**route, "client": client})
+
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Without this the one request worth seeing is the only one with
+            # no outgoing line.
+            logger.exception(
+                "outgoing response",
+                extra={
+                    **route,
+                    "status": 500,
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                },
+            )
+            raise
+
+        logger.info(
+            "outgoing response",
+            extra={
+                **route,
+                "status": response.status_code,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            },
+        )
+        # So a caller can quote it when reporting a problem.
+        response.headers["x-request-id"] = request_id.get()
+        return response
 
     app.include_router(ingest_router, prefix="/ingest", tags=["Ingest"])
     app.include_router(retrieve_router, prefix="/retrieve", tags=["Retrieve"])
 
     @app.exception_handler(InvalidRequest)
     async def invalid_request(request: Request, exc: InvalidRequest):
+        """The caller asked for something we cannot act on."""
         logger.warning(f"invalid request to {request.url.path}: {exc}")
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)}
@@ -43,6 +101,7 @@ def create_fast_api_app() -> FastAPI:
 
     @app.exception_handler(ApiException)
     async def qdrant_unavailable(request: Request, exc: ApiException):
+        """Qdrant could not be reached."""
         logger.exception(f"qdrant request failed for {request.url.path}")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -51,6 +110,7 @@ def create_fast_api_app() -> FastAPI:
 
     @app.exception_handler(UnexpectedResponse)
     async def qdrant_http_error(request: Request, exc: UnexpectedResponse):
+        """Qdrant answered with an error."""
         # A 4xx means we sent Qdrant a bad request: our bug, not the caller's,
         # and not something a retry will fix.
         if exc.status_code and exc.status_code < status.HTTP_500_INTERNAL_SERVER_ERROR:
@@ -66,11 +126,8 @@ def create_fast_api_app() -> FastAPI:
 
     @app.exception_handler(APIConnectionError)
     async def openai_unavailable(request: Request, exc: APIError):
-        # Registered on APIConnectionError, which also covers APITimeoutError.
-        # Annotated APIError, the common parent, because the status handler
-        # below delegates 5xx here -- and unlike qdrant's UnexpectedResponse,
-        # APIStatusError is a sibling of APIConnectionError, not a subclass.
-        # Neither carries a status or request id worth reporting here.
+        """The embedding API could not be reached."""
+        # Also covers APITimeoutError, and the 5xx case delegated from below.
         logger.exception(
             "openai unreachable",
             extra={"path": request.url.path},
@@ -82,14 +139,10 @@ def create_fast_api_app() -> FastAPI:
 
     @app.exception_handler(APIStatusError)
     async def openai_http_error(request: Request, exc: APIStatusError):
-        # Starlette dispatches on the MRO, so this one handler covers every
-        # status error: 400, 401, 403, 404, 422, 429 and 5xx.
-        #
-        # request_id is the field worth having -- it is what OpenAI support
-        # asks for, and nothing else identifies the failed call. The batch
-        # itself is never logged: for embeddings the request body is the
-        # corpus, and a failed batch in the log store is document text in the
-        # log store.
+        """The embedding API answered with an error."""
+        # Starlette dispatches on the MRO, so this covers every status error.
+        # request_id is what OpenAI support asks for. The batch is never
+        # logged: for embeddings the request body is the corpus.
         context = {
             "path": request.url.path,
             "status": exc.status_code,
@@ -97,9 +150,7 @@ def create_fast_api_app() -> FastAPI:
         }
 
         if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
-            # Reached only after the client exhausted its own retries, so this
-            # is real saturation rather than a blip. Expected and handled --
-            # no traceback needed.
+            # Only reached after the client exhausted its retries.
             logger.warning("openai rate limited", extra=context)
             return JSONResponse(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -110,8 +161,7 @@ def create_fast_api_app() -> FastAPI:
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         ):
-            # Not transient: every request fails until the key is fixed. Its
-            # own level so it is greppable and cannot be mistaken for a blip.
+            # Not transient: every request fails until the key is fixed.
             logger.error("openai rejected our credentials", extra=context)
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -119,8 +169,7 @@ def create_fast_api_app() -> FastAPI:
             )
 
         if exc.status_code < status.HTTP_500_INTERNAL_SERVER_ERROR:
-            # A 4xx means we sent a bad request -- an oversized batch, too many
-            # inputs, a bad model name. Our bug, and not one a retry fixes.
+            # A 4xx means we sent something malformed. Our bug, not a retry.
             logger.exception("openai rejected our request", extra=context)
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
