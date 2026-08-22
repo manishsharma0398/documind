@@ -14,3 +14,8 @@ wheels/
 
 # Local vector store
 qdrant_storage/
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
