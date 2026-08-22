@@ -2,12 +2,10 @@ from openai import AsyncOpenAI
 from openai.types import CreateEmbeddingResponse
 
 from ..settings import get_settings
-from ..utils.constants import (
-    EMBEDDING_DIMENSIONS,
-    EMBEDDING_MODEL,
-    OPENAI_MAX_RETRIES,
-    OPENAI_TIMEOUT,
-)
+from ..utils.embedding_model import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
+
+OPENAI_TIMEOUT: float = 500
+OPENAI_MAX_RETRIES: int = 5
 
 _openai_client: AsyncOpenAI | None = None
 

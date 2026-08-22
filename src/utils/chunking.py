@@ -1,5 +1,7 @@
+import json
 from collections.abc import Iterator
 from functools import lru_cache
+from hashlib import sha256
 from pathlib import PurePosixPath
 
 import tiktoken
@@ -8,8 +10,28 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
 )
 
-from .constants import EMBEDDING_MODEL, MIN_CHUNK_TOKENS, TEXT_OVERLAP, TOKEN_SIZE
+from .embedding_model import EMBEDDING_MODEL
 from .models import Chunk, Document
+
+# 100 left too little room: the section breadcrumb was ~29% of every embedded
+# chunk, and top_k=3 gave the model ~300 tokens to answer from. At 400 the
+# breadcrumb is ~17% and top_k=3 is ~510 tokens.
+#
+# Chunks come out at ~178 tokens on average, well under this number: the
+# markdown header split runs first, and most sections are shorter than the
+# budget. This is a ceiling, not a target.
+TOKEN_SIZE = 400
+TEXT_OVERLAP = int(TOKEN_SIZE * 0.1)
+
+# Chunks with less real content than this are heading-only sections. Kept in
+# the index but excludable at query time via content_tokens.
+MIN_CHUNK_TOKENS = 100
+
+# Bump when chunking changes in a way the constants below do not capture --
+# a different splitter, strip_headers flipping, a new breadcrumb layout.
+# Without a bump, every file_hash stays valid and a re-ingest silently keeps
+# chunks built by the old code.
+CHUNKER_VERSION = 1
 
 MARKDOWN_EXTS = {".md", ".markdown", ".mdx"}
 MARKDOWN_HEADERS = [("#", "h1"), ("##", "h2"), ("###", "h3"), ("####", "h4")]
@@ -63,6 +85,58 @@ def _markdown_splitter() -> MarkdownHeaderTextSplitter:
         headers_to_split_on=MARKDOWN_HEADERS,
         strip_headers=True,
     )
+
+
+def _pipeline_fingerprint() -> str:
+    """Digest of everything that changes what chunk_docs produces.
+
+    Folded into every file_hash so retuning the pipeline invalidates the whole
+    index automatically. The embedding model is included because vectors from a
+    different model are not comparable, even for identical text.
+    """
+    # Canonical JSON rather than a joined string: joining on a separator is
+    # not injective -- ["a|b", "c"] and ["a", "b|c"] both render "a|b|c", so
+    # two different configurations could share a fingerprint. sort_keys makes
+    # the output independent of declaration order.
+    #
+    # Nothing unordered may go in here. A set renders in an order that varies
+    # between processes, because string hashing is randomised per run.
+    config = {
+        "chunker_version": CHUNKER_VERSION,
+        "embedding_model": EMBEDDING_MODEL,
+        "token_size": TOKEN_SIZE,
+        "text_overlap": TEXT_OVERLAP,
+        "max_header_depth": MAX_HEADER_DEPTH,
+        "section_separator": SECTION_SEPARATOR,
+        "markdown_headers": MARKDOWN_HEADERS,
+    }
+    canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
+    return sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def _normalise(text: str) -> str:
+    """Strip differences that carry no meaning but change the bytes.
+
+    read_text_file opens in binary and decodes, so Python's universal-newline
+    translation never runs: a file touched by a Windows editor or by
+    core.autocrlf keeps its CRLF and would hash as changed. The BOM is the same
+    story -- an editor toggles it and the whole corpus re-embeds.
+    """
+    return text.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def file_hash(text: str) -> str:
+    """Skip-key for one file: its content plus the pipeline that shaped it.
+
+    Content, not mtime -- a git checkout rewrites mtimes without changing a
+    byte, and would force a pointless re-embed of the whole corpus.
+    """
+    payload = json.dumps(
+        {"pipeline": _pipeline_fingerprint(), "content": _normalise(text)},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return sha256(payload.encode("utf-8")).hexdigest()
 
 
 def folder_path_of(source: str) -> str | None:
@@ -181,7 +255,12 @@ def chunk_docs(docs: list[Document]) -> Iterator[Chunk]:
     """
     for doc in docs:
         folders = folder_path_of(doc.source)
+        # Once per document, not per chunk: every chunk of a file shares it.
+        doc_hash = file_hash(doc.text)
         splitted_doc = split_doc(doc.text, doc.file_ext, folders)
+        # split_doc returns a list, so the total is known before the first
+        # chunk is yielded and every chunk of the document can carry it.
+        chunk_total = len(splitted_doc)
         for i, (chunk, headers, section) in enumerate(splitted_doc):
             text = with_breadcrumb(chunk, section)
             yield Chunk(
@@ -189,6 +268,8 @@ def chunk_docs(docs: list[Document]) -> Iterator[Chunk]:
                 document_id=str(doc.document_id),
                 source=doc.source,
                 chunk_index=i,
+                chunk_total=chunk_total,
+                file_hash=doc_hash,
                 file_ext=doc.file_ext,
                 file_name=doc.file_name,
                 # Counted on the stored text, not the bare chunk: the

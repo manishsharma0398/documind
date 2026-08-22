@@ -2,20 +2,78 @@ from pathlib import Path
 from uuid import uuid4
 
 from ..settings import get_settings
-from .constants import (
-    DENY_NAMES,
-    DENY_SUFFIXES,
-    MAX_FILE_BYTES,
-    MAX_FILES,
-    MAX_TOTAL_BYTES,
-    SKIP_DIRS,
-    SKIP_NAMES,
-    SKIP_SUFFIXES,
-    SNIFF_BYTES,
-)
 from .exceptions import InvalidRequest
 from .logger import logger
 from .models import Document
+
+# Bytes inspected when deciding whether a file is binary.
+SNIFF_BYTES = 4096
+
+# Guardrails so one request cannot sweep up an entire filesystem.
+MAX_FILES = 2_000
+MAX_FILE_BYTES = 2_000_000
+MAX_TOTAL_BYTES = 50_000_000
+
+
+SKIP_DIRS = {
+    ".venv",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    ".next",
+    "dist",
+    "build",
+    "target",
+    "coverage",
+    ".cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "qdrant_storage",
+    ".ssh",
+    ".aws",
+    ".gnupg",
+    ".kube",
+}
+
+# Never ingested, whatever extensions the caller asks for.
+DENY_NAMES = {
+    ".env",
+    ".npmrc",
+    ".netrc",
+    ".pgpass",
+    ".htpasswd",
+    ".git-credentials",
+    "credentials",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+}
+DENY_SUFFIXES = {
+    ".pem",
+    ".key",
+    ".pfx",
+    ".p12",
+    ".jks",
+    ".keystore",
+    ".ppk",
+    ".gpg",
+    ".asc",
+    ".kdbx",
+}
+
+
+# Generated lock files: pure noise, never worth embedding.
+SKIP_NAMES = {
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "pnpm-lock.yaml",
+    "bun.lockb",
+    ".terraform.lock.hcl",
+}
+
+SKIP_SUFFIXES = {".lock"}
 
 
 def ingest_root() -> Path:
@@ -66,6 +124,7 @@ def get_files_from_folder(
         raise InvalidRequest(f"{dir} is outside the ingest root")
     docs: list[Document] = []
     skipped = 0
+    empty = 0
     total_bytes = 0
     # Walk the resolved path, not the caller's: a relative folder_path like
     # "./" yields relative roots, and relative_to(ingest_base) below needs
@@ -91,6 +150,15 @@ def get_files_from_folder(
             if text is None:
                 skipped += 1
                 continue
+            # An empty or whitespace-only file has nothing to index, and
+            # indexing nothing is not a no-op here: it produces no chunks, so
+            # no points, so the next run finds no hash for the source and
+            # rebuilds it -- forever. Six 0-byte README.md scaffolds in the
+            # test corpus were re-processed on every ingest and could never
+            # converge to skipped.
+            if not text.strip():
+                empty += 1
+                continue
             total_bytes += len(text)
             if len(docs) >= MAX_FILES or total_bytes > MAX_TOTAL_BYTES:
                 raise InvalidRequest(
@@ -115,4 +183,6 @@ def get_files_from_folder(
             )
     if skipped:
         logger.info(f"skipped {skipped} binary or unreadable files in {dir}")
+    if empty:
+        logger.info(f"skipped {empty} empty files in {dir}")
     return docs
