@@ -39,6 +39,15 @@ class Chunk(BaseModel):
     # rebuilding. See chunking.file_hash.
     file_hash: str
 
+    # How many chunks this source produced in the run that wrote it. A hash
+    # says the content matches; it cannot say the write finished. Old points
+    # are deleted before new ones are written, so a run that dies mid-file
+    # leaves that file's surviving chunks all carrying the *new* hash -- and a
+    # hash-only check reads that as complete and never rebuilds it. Comparing
+    # this against the number of points actually indexed for the source is what
+    # distinguishes a finished write from a truncated one.
+    chunk_total: int
+
     # Markdown headers in scope where this chunk was cut. Sparse: a chunk under
     # "## Setup" with no "###" carries only h1 and h2. Empty for non-markdown.
     # Kept structured so Qdrant can filter on it later.

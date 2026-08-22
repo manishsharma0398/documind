@@ -258,6 +258,9 @@ def chunk_docs(docs: list[Document]) -> Iterator[Chunk]:
         # Once per document, not per chunk: every chunk of a file shares it.
         doc_hash = file_hash(doc.text)
         splitted_doc = split_doc(doc.text, doc.file_ext, folders)
+        # split_doc returns a list, so the total is known before the first
+        # chunk is yielded and every chunk of the document can carry it.
+        chunk_total = len(splitted_doc)
         for i, (chunk, headers, section) in enumerate(splitted_doc):
             text = with_breadcrumb(chunk, section)
             yield Chunk(
@@ -265,6 +268,7 @@ def chunk_docs(docs: list[Document]) -> Iterator[Chunk]:
                 document_id=str(doc.document_id),
                 source=doc.source,
                 chunk_index=i,
+                chunk_total=chunk_total,
                 file_hash=doc_hash,
                 file_ext=doc.file_ext,
                 file_name=doc.file_name,

@@ -89,12 +89,18 @@ async def ensure_collection(collection_name: str, vector_size: int | None = None
 async def scroll_all(
     collection_name: str,
     with_payload: list[str],
+    scroll_filter: Filter | None = None,
     page_size: int = 1000,
 ) -> list[dict]:
-    """Every point's payload, one page at a time.
+    """Payloads for the matching points, one page at a time.
 
     with_vectors=False is what makes this cheap: the payloads are a few hundred
     bytes each, the vectors are 6KB each. Callers want the metadata.
+
+    Pass a filter whenever the caller cares about a known set of points.
+    Unfiltered, the cost is the size of the collection; filtered on an indexed
+    field it is the size of the match, and it stays that way as the collection
+    grows.
     """
     client = await get_qdrant_client()
     payloads: list[dict] = []
@@ -104,6 +110,7 @@ async def scroll_all(
             collection_name=collection_name,
             limit=page_size,
             offset=offset,
+            scroll_filter=scroll_filter,
             with_payload=with_payload,
             with_vectors=False,
         )

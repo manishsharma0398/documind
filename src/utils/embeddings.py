@@ -1,4 +1,5 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
+from itertools import islice
 from typing import NamedTuple
 
 from ..clients.openai_client import embed
@@ -27,22 +28,28 @@ class EmbeddedBatch(NamedTuple):
     number: int
 
 
-async def batch_embed(chunks: list[Chunk]) -> AsyncIterator[EmbeddedBatch]:
+async def batch_embed(chunks: Iterable[Chunk]) -> AsyncIterator[EmbeddedBatch]:
     """Embed in batches, yielding each one so the caller can upsert and discard.
 
-    Deliberately not returning a list. A 1536-dimension vector plus its text is
-    roughly 49KB, so accumulating the whole corpus would hold ~288MB at 6k
-    chunks and ~484MB at 10k -- growing with the corpus rather than with the
+    Takes an iterable rather than a list so the whole pipeline can stream:
+    chunk_docs yields, this slices a window off that stream, and nothing ever
+    holds the corpus. Materialising here would defeat the generator upstream.
+
+    Deliberately not returning a list either. A 1536-dimension vector plus its
+    text is roughly 49KB, so accumulating the whole corpus would hold ~288MB at
+    6k chunks and ~484MB at 10k -- growing with the corpus rather than with the
     batch. Yielding keeps peak memory at one batch regardless of corpus size.
 
-    An empty input needs no guard: the loop simply never runs and the generator
-    yields nothing.
+    An empty input needs no guard: the first slice is empty and the loop never
+    runs.
 
     Errors from `embed` propagate. Only the ingest loop knows whether a failed
     batch means abort the run or record it and continue.
     """
-    for number, i in enumerate(range(0, len(chunks), BATCH), start=1):
-        window = chunks[i : i + BATCH]
+    stream = iter(chunks)
+    number = 0
+    while window := list(islice(stream, BATCH)):
+        number += 1
         response = await embed([c.text for c in window])
         yield EmbeddedBatch(
             chunks=[

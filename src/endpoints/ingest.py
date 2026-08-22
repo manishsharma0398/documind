@@ -13,7 +13,7 @@ from ..utils.chunking import chunk_docs
 from ..utils.embedding_model import EMBEDDING_COST_PER_MILLION
 from ..utils.embeddings import batch_embed
 from ..utils.filesystem import get_files_from_folder
-from ..utils.ingestion import indexed_hashes, partition_documents
+from ..utils.ingestion import indexed_sources, partition_documents
 from ..utils.logger import logger
 from ..utils.models import IngestRequest
 
@@ -27,9 +27,13 @@ async def ingest(payload: IngestRequest):
     await ensure_collection(collection)
 
     # Read the index even when reindexing: the hashes are ignored for the
-    # partition, but their absence is how we know the collection is empty and
-    # the delete below can be skipped.
-    indexed = await indexed_hashes(collection)
+    # partition, but their absence is how we know none of these sources are
+    # indexed and the delete below can be skipped.
+    #
+    # Scoped to the sources in this request. Reading the whole collection to
+    # use a fraction of it costs the size of the index rather than the size of
+    # the request, and a request may name a subfolder.
+    indexed = await indexed_sources(collection, [doc.source for doc in found])
     if payload.reindex:
         unchanged, to_ingest = [], found
     else:
@@ -51,7 +55,8 @@ async def ingest(payload: IngestRequest):
     # rather than duplicated -- and absent means the next run finds no hash for
     # them and rebuilds. Unchanged files are never at risk.
     #
-    # Nothing to clear when the collection is empty, which is every first run.
+    # Nothing to clear when none of these sources are indexed, which is every
+    # first run.
     # Scoped to the sources in this request even on a reindex: a request may
     # name a subfolder, and wiping the collection would take the rest with it.
     if indexed:
@@ -67,14 +72,16 @@ async def ingest(payload: IngestRequest):
             ),
         )
 
-    chunks = list(chunk_docs(to_ingest))
-
-    # Our own count, from tiktoken, before anything is sent.
-    counted = sum(chunk.total_tokens for chunk in chunks)
+    # Not materialised: chunk_docs yields, batch_embed slices a window off
+    # that stream, and each batch is upserted and dropped. Counting happens as
+    # batches go past, because consuming a generator to len() it would leave
+    # nothing for the loop.
+    counted = 0
+    chunk_count = 0
     billed = 0
     batches = 0
 
-    async for batch in batch_embed(chunks):
+    async for batch in batch_embed(chunk_docs(to_ingest)):
         await upsert_collection(
             collection,
             points=[
@@ -88,10 +95,13 @@ async def ingest(payload: IngestRequest):
         )
         billed += batch.tokens
         batches = batch.number
+        chunk_count += len(batch.chunks)
+        # Our own count, from tiktoken, for the drift check below.
+        counted += sum(chunk.total_tokens for chunk in batch.chunks)
 
     cost = billed / 1_000_000 * EMBEDDING_COST_PER_MILLION
     logger.info(
-        f"ingested {len(to_ingest)} of {len(found)} documents as {len(chunks)} "
+        f"ingested {len(to_ingest)} of {len(found)} documents as {chunk_count} "
         f"chunks in {batches} batches; skipped {len(unchanged)} unchanged; "
         f"{billed} tokens billed, ${cost:.4f}"
     )
@@ -110,7 +120,7 @@ async def ingest(payload: IngestRequest):
     return {
         "documents": len(to_ingest),
         "skipped": len(unchanged),
-        "chunks": len(chunks),
+        "chunks": chunk_count,
         "batches": batches,
         "tokens": billed,
         "cost_usd": round(cost, 6),
