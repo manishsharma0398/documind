@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     # Every ingest request must resolve inside this directory.
     ingest_root: Path = Path(".")
 
+    # Not constants: a deployment may want its own collection (staging vs
+    # production against one Qdrant), and top_k is a knob worth turning
+    # without a redeploy.
+    qdrant_collection: str = "docs"
+    default_top_k: int = 3
+
     @field_validator("qdrant_api_key", mode="after")
     @classmethod
     def blank_key_is_none(cls, value: str | None) -> str | None:
