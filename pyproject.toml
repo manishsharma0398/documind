@@ -31,6 +31,7 @@ build-backend = "uv_build"
 dev = ["pre-commit>=4.5.1", "pytest>=9.1.1", "pytest-cov>=7.1.0"]
 lint = [
     "bandit>=1.9.4",
+    "pyright>=1.1.406",
     "black>=26.3.1",
     "flake8>=7.3.0",
     "flake8-pyproject>=1.2.4",
@@ -53,3 +54,9 @@ extend-ignore = ["E203", "W503"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q --strict-markers"
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.13"
+# The engine behind Pylance, so the hook reports what the editor already shows.
+typeCheckingMode = "standard"

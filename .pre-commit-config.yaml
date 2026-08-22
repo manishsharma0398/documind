@@ -63,3 +63,10 @@ repos:
         pass_filenames: false
         types: [python]
         args: ["-r", "src/"]
+
+      - id: pyright
+        name: pyright
+        entry: uv run --group lint pyright
+        language: system
+        pass_filenames: false
+        types: [python]
