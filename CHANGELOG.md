@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.0](https://github.com/manishsharma0398/documind/compare/v0.5.0...v0.6.0) (2026-08-22)
+
+
+### Features
+
+* let a request exclude sources by glob ([#24](https://github.com/manishsharma0398/documind/issues/24)) ([4e3a9d8](https://github.com/manishsharma0398/documind/commit/4e3a9d85999e9adc679b50dcdc953aa40790439d))
+* log every request with a correlation id ([#26](https://github.com/manishsharma0398/documind/issues/26)) ([266353b](https://github.com/manishsharma0398/documind/commit/266353b8e55456bbdc6d9270a1cafdebba86093f))
+* skip unchanged files on re-ingest ([#23](https://github.com/manishsharma0398/documind/issues/23)) ([a30366f](https://github.com/manishsharma0398/documind/commit/a30366f7c3395a57d879699bd570131427de8dc2))
+
 ## [0.5.0](https://github.com/manishsharma0398/documind/compare/v0.4.0...v0.5.0) (2026-08-21)
 
 
