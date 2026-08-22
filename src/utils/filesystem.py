@@ -124,6 +124,7 @@ def get_files_from_folder(
         raise InvalidRequest(f"{dir} is outside the ingest root")
     docs: list[Document] = []
     skipped = 0
+    empty = 0
     total_bytes = 0
     # Walk the resolved path, not the caller's: a relative folder_path like
     # "./" yields relative roots, and relative_to(ingest_base) below needs
@@ -149,6 +150,15 @@ def get_files_from_folder(
             if text is None:
                 skipped += 1
                 continue
+            # An empty or whitespace-only file has nothing to index, and
+            # indexing nothing is not a no-op here: it produces no chunks, so
+            # no points, so the next run finds no hash for the source and
+            # rebuilds it -- forever. Six 0-byte README.md scaffolds in the
+            # test corpus were re-processed on every ingest and could never
+            # converge to skipped.
+            if not text.strip():
+                empty += 1
+                continue
             total_bytes += len(text)
             if len(docs) >= MAX_FILES or total_bytes > MAX_TOTAL_BYTES:
                 raise InvalidRequest(
@@ -173,4 +183,6 @@ def get_files_from_folder(
             )
     if skipped:
         logger.info(f"skipped {skipped} binary or unreadable files in {dir}")
+    if empty:
+        logger.info(f"skipped {empty} empty files in {dir}")
     return docs
