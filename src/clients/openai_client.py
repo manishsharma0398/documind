@@ -11,6 +11,7 @@ _openai_client: AsyncOpenAI | None = None
 
 
 async def get_openai_client() -> AsyncOpenAI:
+    """The shared client, built on first use."""
     global _openai_client
     if _openai_client is None:
         settings = get_settings()
@@ -23,6 +24,7 @@ async def get_openai_client() -> AsyncOpenAI:
 
 
 async def close_openai_client():
+    """Close it, so the next call builds a fresh one."""
     global _openai_client
     if _openai_client is not None:
         await _openai_client.close()
@@ -30,12 +32,9 @@ async def close_openai_client():
 
 
 async def embed(texts: list[str]) -> CreateEmbeddingResponse:
-    # No try/except here on purpose. This module cannot decide what a failure
-    # means -- only the ingest loop knows whether to skip the batch, abort the
-    # run, or record it and carry on. Swallowing here would hand the caller a
-    # None where it expects a response, and surface as an AttributeError a long
-    # way from the cause. The app-level handlers in app.py map these to status
-    # codes for request-scoped calls.
+    """Embed a batch. Returns the whole response so the caller can read usage."""
+    # No try/except on purpose: only the caller knows whether a failed batch
+    # means abort or continue. app.py maps these to status codes.
     return await (await get_openai_client()).embeddings.create(
         model=EMBEDDING_MODEL,
         input=texts,

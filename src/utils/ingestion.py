@@ -11,17 +11,10 @@ from .models import Document
 class IndexedSource(NamedTuple):
     """What the index currently holds for one source file."""
 
-    # Every distinct file_hash recorded against it. More than one means an
-    # interrupted run left chunks from two different pipelines or revisions.
     hashes: set[str]
 
-    # Every distinct chunk_total recorded against it. More than one means the
-    # same thing from the other direction.
     totals: set[int]
 
-    # How many points are actually indexed for it right now. Not `count`:
-    # NamedTuple subclasses tuple, which already has a count() method, and a
-    # field of that name shadows it with an int.
     point_count: int
 
 
@@ -31,19 +24,8 @@ async def indexed_sources(
 ) -> dict[str, IndexedSource]:
     """What the index holds for each of `sources`.
 
-    Scoped to the sources the caller asked about, not the whole collection.
-    A request may name a subfolder, and reading every payload to use a
-    fraction of them costs the size of the index rather than the size of the
-    request -- a gap that widens as the collection grows. `source` carries a
-    payload index (see ensure_source_index), so the filter is cheap.
-
-    The bound worth knowing: this builds one MatchAny term per source, so a
-    request naming tens of thousands of files would want chunking. At corpus
-    scale it is one filter.
-
-    Sets rather than single values, because one source can legitimately carry
-    two of either. A large note is 70+ chunks and a batch is 256, so a file's
-    chunks can straddle two embed batches.
+    Scoped to the request: `source` carries a payload index, so the cost is the
+    size of the request rather than of the collection.
     """
     hashes: dict[str, set[str]] = defaultdict(set)
     totals: dict[str, set[int]] = defaultdict(set)
@@ -59,9 +41,8 @@ async def indexed_sources(
             must=[FieldCondition(key="source", match=MatchAny(any=sources))]
         ),
     ):
-        # Every point is written from a validated Chunk, so all three are
-        # always present. A KeyError here means something wrote outside the
-        # model, which should be loud rather than silently skipped.
+        # Written from a validated Chunk, so a KeyError means something wrote
+        # outside the model -- which should be loud.
         source = payload["source"]
         hashes[source].add(payload["file_hash"])
         totals[source].add(payload["chunk_total"])
@@ -79,21 +60,9 @@ def partition_documents(
 ) -> tuple[list[Document], list[Document]]:
     """Split documents into (unchanged, needs_ingest).
 
-    A document is unchanged only when all three agree:
-
-    - the index holds exactly one hash for it, and it matches the file on disk
-    - the index holds exactly one chunk_total for it
-    - that many points are actually present
-
-    The count is what the hash alone cannot tell us. Old points are deleted
-    before new ones are written, so a run that dies mid-file leaves that file's
-    surviving chunks all carrying the *new* hash. A hash-only check reads that
-    as complete and never rebuilds it, leaving the document silently truncated
-    in the index -- retrievable, plausible, and missing its tail.
-
-    Anything else -- absent, mismatched, mixed, or short -- is rebuilt.
-    Rebuilding needlessly costs one embedding call; skipping wrongly leaves the
-    index quietly wrong.
+    Unchanged means one matching hash, one chunk_total, and that many points
+    present. The count is what the hash cannot tell us -- old points are
+    deleted first, so a run that dies mid-file leaves the new hash behind.
     """
     unchanged: list[Document] = []
     needs_ingest: list[Document] = []

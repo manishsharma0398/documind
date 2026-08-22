@@ -4,17 +4,23 @@ from pydantic import BaseModel, Field
 
 
 class IngestRequest(BaseModel):
+    """What to index, and what to leave out."""
+
     folder_path: str
     extensions: list[str] = Field(min_length=1)
 
-    # Rebuild every matched file, whatever its hash says. The escape hatch for
-    # when the index is wrong in a way the hash cannot see -- a half-finished
-    # schema change, a payload field added by hand, a collection restored from
-    # a backup.
+    # Globs against `source`. Corpus policy is the caller's, not ours, and an
+    # eval harness needs to pin it.
+    exclude: list[str] = Field(default_factory=list)
+
+    # Rebuild regardless of hash, for when the index is wrong in a way the
+    # hash cannot see.
     reindex: bool = False
 
 
 class Document(BaseModel):
+    """One source file, read but not yet split."""
+
     text: str
     source: str
     file_name: str
@@ -23,6 +29,8 @@ class Document(BaseModel):
 
 
 class Chunk(BaseModel):
+    """A slice of a document, ready to embed."""
+
     text: str
     source: str
     file_name: str
@@ -32,31 +40,22 @@ class Chunk(BaseModel):
     content_tokens: int
     chunk_index: int
 
-    # Identifies the source file AND the pipeline that produced this chunk, so
-    # an unchanged file can be skipped on re-ingest. It is not a plain content
-    # digest: retuning the chunker changes the output without changing a byte
-    # on disk, and a content-only hash would skip exactly the files that need
-    # rebuilding. See chunking.file_hash.
+    # Content plus the pipeline settings, so retuning the chunker invalidates
+    # it. A content-only digest would skip the files that need rebuilding.
     file_hash: str
 
-    # How many chunks this source produced in the run that wrote it. A hash
-    # says the content matches; it cannot say the write finished. Old points
-    # are deleted before new ones are written, so a run that dies mid-file
-    # leaves that file's surviving chunks all carrying the *new* hash -- and a
-    # hash-only check reads that as complete and never rebuilds it. Comparing
-    # this against the number of points actually indexed for the source is what
-    # distinguishes a finished write from a truncated one.
+    # Compared against the points actually indexed: a hash proves the content,
+    # only a count proves the write finished.
     chunk_total: int
 
-    # Markdown headers in scope where this chunk was cut. Sparse: a chunk under
-    # "## Setup" with no "###" carries only h1 and h2. Empty for non-markdown.
-    # Kept structured so Qdrant can filter on it later.
+    # Sparse, and empty for non-markdown. Structured so Qdrant can filter on it.
     headers: dict[str, str] = Field(default_factory=dict)
 
-    # The same thing flattened for display and citation, e.g.
-    # "terraform > Providers > State caching". None when there is nothing to show.
+    # Flattened for display, e.g. "terraform > Providers > State caching".
     section: str | None = None
 
 
 class EmbeddedChunk(Chunk):
+    """A chunk with its vector."""
+
     embedding: list[float]

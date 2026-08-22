@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from ..settings import get_settings
@@ -104,9 +104,28 @@ def read_text_file(path: Path) -> str | None:
         return None
 
 
+def is_excluded(source: str, patterns: list[str]) -> bool:
+    """True when `source` matches any caller-supplied glob.
+
+    full_match, not match, so a pattern describes the whole path: "CLAUDE.md"
+    is the one at the root, "**/CLAUDE.md" is any of them.
+    """
+    if not patterns:
+        return False
+    path = PurePosixPath(source)
+    return any(path.full_match(pattern) for pattern in patterns)
+
+
 def get_files_from_folder(
-    dir: str, extensions: list[str] | None = None
+    dir: str,
+    extensions: list[str] | None = None,
+    exclude: list[str] | None = None,
 ) -> list[Document]:
+    """Every readable file under `dir` that the caller asked for.
+
+    Refuses anything outside INGEST_ROOT, and skips credentials, vendor
+    directories, binaries and empty files whatever the extensions say.
+    """
     if not dir:
         raise InvalidRequest("path is required")
     directory: Path = Path(dir).expanduser()
@@ -125,6 +144,7 @@ def get_files_from_folder(
     docs: list[Document] = []
     skipped = 0
     empty = 0
+    excluded = 0
     total_bytes = 0
     # Walk the resolved path, not the caller's: a relative folder_path like
     # "./" yields relative roots, and relative_to(ingest_base) below needs
@@ -139,6 +159,11 @@ def get_files_from_folder(
             ):
                 continue
             path = Path(root) / file
+            # Before the read, so an excluded file costs no I/O.
+            source = str(path.relative_to(ingest_base))
+            if is_excluded(source, exclude or []):
+                excluded += 1
+                continue
             try:
                 if path.stat().st_size > MAX_FILE_BYTES:
                     skipped += 1
@@ -150,12 +175,8 @@ def get_files_from_folder(
             if text is None:
                 skipped += 1
                 continue
-            # An empty or whitespace-only file has nothing to index, and
-            # indexing nothing is not a no-op here: it produces no chunks, so
-            # no points, so the next run finds no hash for the source and
-            # rebuilds it -- forever. Six 0-byte README.md scaffolds in the
-            # test corpus were re-processed on every ingest and could never
-            # converge to skipped.
+            # No chunks means no points means no hash, so it would be
+            # rebuilt on every run forever.
             if not text.strip():
                 empty += 1
                 continue
@@ -172,17 +193,16 @@ def get_files_from_folder(
                     file_ext=path.suffix,
                     file_name=path.name,
                     text=text,
-                    # Relative to the ingest root, not to the folder this
-                    # request happened to name. Ingesting ~/notes and then
-                    # ~/notes/terraform must produce the same source for the
-                    # same file: it is the delete-by-filter key for idempotent
-                    # re-indexing, the join key for eval scoring, and part of
-                    # the embedded breadcrumb.
-                    source=str(path.relative_to(ingest_base)),
+                    # Relative to the ingest root, not the requested folder:
+                    # it is the delete key, the eval join key, and part of the
+                    # breadcrumb, so it must not shift between requests.
+                    source=source,
                 )
             )
     if skipped:
         logger.info(f"skipped {skipped} binary or unreadable files in {dir}")
     if empty:
         logger.info(f"skipped {empty} empty files in {dir}")
+    if excluded:
+        logger.info(f"excluded {excluded} files in {dir} by caller pattern")
     return docs

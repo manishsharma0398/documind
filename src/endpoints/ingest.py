@@ -15,25 +15,24 @@ from ..utils.embeddings import batch_embed
 from ..utils.filesystem import get_files_from_folder
 from ..utils.ingestion import indexed_sources, partition_documents
 from ..utils.logger import logger
-from ..utils.models import IngestRequest
+from ..utils.models import Document, IngestRequest
 
 ingest_router = APIRouter()
 
 
 @ingest_router.post("")
 async def ingest(payload: IngestRequest):
+    """Index a folder, rebuilding only what changed since the last run."""
     collection = get_settings().qdrant_collection
-    found = get_files_from_folder(payload.folder_path, payload.extensions)
+    found = get_files_from_folder(
+        payload.folder_path, payload.extensions, payload.exclude
+    )
     await ensure_collection(collection)
 
-    # Read the index even when reindexing: the hashes are ignored for the
-    # partition, but their absence is how we know none of these sources are
-    # indexed and the delete below can be skipped.
-    #
-    # Scoped to the sources in this request. Reading the whole collection to
-    # use a fraction of it costs the size of the index rather than the size of
-    # the request, and a request may name a subfolder.
+    # Read even when reindexing: an empty result is how we know there is
+    # nothing to delete. Scoped to this request, since it may name a subfolder.
     indexed = await indexed_sources(collection, [doc.source for doc in found])
+    unchanged: list[Document]
     if payload.reindex:
         unchanged, to_ingest = [], found
     else:
@@ -50,15 +49,9 @@ async def ingest(payload: IngestRequest):
             "cost_usd": 0.0,
         }
 
-    # Clear the old points for the files being rebuilt, before writing new ones.
-    # Only these files are touched, so an interrupted run leaves them absent
-    # rather than duplicated -- and absent means the next run finds no hash for
-    # them and rebuilds. Unchanged files are never at risk.
-    #
-    # Nothing to clear when none of these sources are indexed, which is every
-    # first run.
-    # Scoped to the sources in this request even on a reindex: a request may
-    # name a subfolder, and wiping the collection would take the rest with it.
+    # Only the files being rebuilt, so an interrupted run leaves them absent
+    # rather than duplicated, and the next run rebuilds them. Scoped even on a
+    # reindex: a request may name a subfolder.
     if indexed:
         await delete_collection_data(
             collection,
@@ -72,10 +65,8 @@ async def ingest(payload: IngestRequest):
             ),
         )
 
-    # Not materialised: chunk_docs yields, batch_embed slices a window off
-    # that stream, and each batch is upserted and dropped. Counting happens as
-    # batches go past, because consuming a generator to len() it would leave
-    # nothing for the loop.
+    # Counted as batches go past: consuming the generator to len() it would
+    # leave nothing to embed.
     counted = 0
     chunk_count = 0
     billed = 0
@@ -106,11 +97,8 @@ async def ingest(payload: IngestRequest):
         f"{billed} tokens billed, ${cost:.4f}"
     )
 
-    # text-embedding-3-small tokenises with cl100k_base, which is what
-    # tiktoken.encoding_for_model returns, so these should agree exactly.
-    # Divergence means TOKEN_SIZE is not the ceiling it claims to be, BATCH is
-    # no longer provably under the per-request cap, and every cost figure
-    # drifts -- all of it silently.
+    # Same tokeniser both sides, so these should agree exactly. Divergence
+    # means TOKEN_SIZE is not a ceiling and BATCH is no longer provably safe.
     if billed != counted:
         logger.warning(
             f"token count drift: tiktoken counted {counted}, "
