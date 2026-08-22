@@ -3,13 +3,12 @@
 A retrieval-augmented Q&A service for large personal knowledge bases — ask questions
 against your own notes and get answers grounded in them, with citations.
 
-Built around a corpus of ~410 markdown documents (~484k words) spanning 14 technical
-domains, which is large enough that retrieval quality is a real engineering problem rather
-than a formality.
+Built around a corpus of ~400 markdown documents spanning 14 technical domains, which is
+large enough that retrieval quality is a real engineering problem rather than a formality.
 
-> **Status:** FastAPI skeleton is up; ingestion and retrieval are in progress. Metrics in
-> the evaluation table are filled in from measured runs only — empty cells mean not yet
-> measured, not zero.
+> **Status:** ingestion works end to end — 393 documents into 5,345 chunks in about a
+> minute, and re-running costs nothing. Retrieval is not built yet. Numbers in the
+> evaluation table come from measured runs only; empty cells mean not yet measured.
 
 ---
 
@@ -60,15 +59,20 @@ naive retrieval quietly degrades.
                                     grounded answer
 ```
 
+Everything above `/retrieve` is built. The retrieval half is the next piece of work.
+
 **Design decisions worth calling out:**
 
 - **Chunking on token boundaries, not characters,** with overlap — character splits cut
   mid-token and produce embeddings for fragments that mean nothing.
-- **Idempotent re-indexing.** Re-ingesting an unchanged corpus is a no-op; updates delete
-  by payload filter before reinsert, so repeated ingestion never silently duplicates chunks
-  and skews retrieval.
-- **Batched embedding with cost tracking** — embedding calls dominate ingestion cost, and
-  batch size is the main lever on both spend and wall time.
+- **Idempotent re-indexing.** Each chunk carries a hash of its source and the number of
+  chunks that file produced, so a re-ingest rebuilds only what changed — and a run that
+  died halfway is detected rather than mistaken for a finished one. On the test corpus a
+  second run touches nothing and costs nothing.
+- **Batched embedding with cost tracking**, streamed end to end. Chunks are generated,
+  embedded a batch at a time, upserted and dropped, so peak memory tracks the batch rather
+  than the corpus. Every run reports tokens billed against tokens counted locally; a
+  mismatch means something drifted.
 - **A similarity floor with context-only prompting.** If nothing clears the threshold, the
   system refuses rather than answering from parametric knowledge. Refusal accuracy is
   measured, not assumed.
@@ -133,19 +137,35 @@ uv run fastapi dev src/main.py
 
 Interactive docs at `http://127.0.0.1:8000/docs`.
 
-Copy `.env.example` to `.env` and fill in your keys. `.env` is gitignored.
+Copy `.env.example` to `.env` and fill in your keys. `INGEST_ROOT` is the one that matters
+most — every ingest request must resolve inside it. Settings are read once at startup, so
+changing `.env` needs a restart.
+
+Then index something:
+
+```bash
+curl -X POST http://localhost:8000/ingest \
+  -H 'content-type: application/json' \
+  -d '{"folder_path": "/path/to/notes", "extensions": [".md"], "exclude": ["drafts/**"]}'
+```
+
+Run it again and it will report everything skipped.
 
 ---
 
 ## Development
 
-Formatting, linting and security checks run as pre-commit hooks — black and isort at
-line-length 88, flake8, bandit over `src/`, and `uv lock --check` to keep the lockfile
-honest. Run them across the whole tree with:
+Formatting, linting, typing and security checks run as pre-commit hooks — black and isort at
+line-length 88, flake8, pyright, bandit over `src/`, and `uv lock --check` to keep the
+lockfile honest. Run them across the whole tree with:
 
 ```bash
 uv run pre-commit run --all-files
 ```
+
+Requests are logged in and out as JSON with a correlation id on every line, including lines
+from deep in the call stack, so one request's whole trace can be pulled out at once. The id
+comes back as `x-request-id`.
 
 ---
 
