@@ -7,6 +7,12 @@ class IngestRequest(BaseModel):
     folder_path: str
     extensions: list[str] = Field(min_length=1)
 
+    # Globs matched against `source`, the path relative to the ingest root.
+    # Which documents belong in an index is the caller's policy, not the
+    # service's, so it travels with the request -- and an eval harness can pin
+    # the list to keep a baseline reproducible.
+    exclude: list[str] = Field(default_factory=list)
+
     # Rebuild every matched file, whatever its hash says. The escape hatch for
     # when the index is wrong in a way the hash cannot see -- a half-finished
     # schema change, a payload field added by hand, a collection restored from

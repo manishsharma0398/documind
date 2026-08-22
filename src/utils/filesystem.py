@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from ..settings import get_settings
@@ -104,8 +104,27 @@ def read_text_file(path: Path) -> str | None:
         return None
 
 
+def is_excluded(source: str, patterns: list[str]) -> bool:
+    """True when `source` matches any caller-supplied glob.
+
+    Corpus policy, not service policy: what belongs in an index is the
+    caller's decision, so the patterns arrive on the request rather than
+    living in SKIP_NAMES. That list is for things no corpus should ever hold
+    -- credentials, generated lock files -- and it ships in a public repo.
+
+    full_match rather than match, so a pattern describes the whole path:
+    "CLAUDE.md" is the one at the root, "**/CLAUDE.md" is any of them.
+    """
+    if not patterns:
+        return False
+    path = PurePosixPath(source)
+    return any(path.full_match(pattern) for pattern in patterns)
+
+
 def get_files_from_folder(
-    dir: str, extensions: list[str] | None = None
+    dir: str,
+    extensions: list[str] | None = None,
+    exclude: list[str] | None = None,
 ) -> list[Document]:
     if not dir:
         raise InvalidRequest("path is required")
@@ -125,6 +144,7 @@ def get_files_from_folder(
     docs: list[Document] = []
     skipped = 0
     empty = 0
+    excluded = 0
     total_bytes = 0
     # Walk the resolved path, not the caller's: a relative folder_path like
     # "./" yields relative roots, and relative_to(ingest_base) below needs
@@ -139,6 +159,14 @@ def get_files_from_folder(
             ):
                 continue
             path = Path(root) / file
+            # Computed here rather than at Document construction so an
+            # excluded file is never read off disk. Relative to the ingest
+            # root, so a pattern means the same thing whichever subfolder a
+            # request names.
+            source = str(path.relative_to(ingest_base))
+            if is_excluded(source, exclude or []):
+                excluded += 1
+                continue
             try:
                 if path.stat().st_size > MAX_FILE_BYTES:
                     skipped += 1
@@ -178,11 +206,13 @@ def get_files_from_folder(
                     # same file: it is the delete-by-filter key for idempotent
                     # re-indexing, the join key for eval scoring, and part of
                     # the embedded breadcrumb.
-                    source=str(path.relative_to(ingest_base)),
+                    source=source,
                 )
             )
     if skipped:
         logger.info(f"skipped {skipped} binary or unreadable files in {dir}")
     if empty:
         logger.info(f"skipped {empty} empty files in {dir}")
+    if excluded:
+        logger.info(f"excluded {excluded} files in {dir} by caller pattern")
     return docs

@@ -23,7 +23,9 @@ ingest_router = APIRouter()
 @ingest_router.post("")
 async def ingest(payload: IngestRequest):
     collection = get_settings().qdrant_collection
-    found = get_files_from_folder(payload.folder_path, payload.extensions)
+    found = get_files_from_folder(
+        payload.folder_path, payload.extensions, payload.exclude
+    )
     await ensure_collection(collection)
 
     # Read the index even when reindexing: the hashes are ignored for the
