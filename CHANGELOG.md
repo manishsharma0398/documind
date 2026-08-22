@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/manishsharma0398/documind/compare/v0.6.0...v0.6.1) (2026-08-22)
+
+
+### Documentation
+
+* bring the readme up to date with what ships ([#28](https://github.com/manishsharma0398/documind/issues/28)) ([6c12614](https://github.com/manishsharma0398/documind/commit/6c126140569fe8a580d97f1d9182ac26e8e5b190))
+
 ## [0.6.0](https://github.com/manishsharma0398/documind/compare/v0.5.0...v0.6.0) (2026-08-22)
 
 
