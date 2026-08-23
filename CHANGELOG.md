@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/manishsharma0398/documind/compare/v0.7.0...v0.7.1) (2026-08-23)
+
+
+### Documentation
+
+* split /retrieve and /ask in the architecture diagram ([#38](https://github.com/manishsharma0398/documind/issues/38)) ([219a98c](https://github.com/manishsharma0398/documind/commit/219a98c292a08b88d310ce5864b05e151e629e2a))
+
 ## [0.7.0](https://github.com/manishsharma0398/documind/compare/v0.6.3...v0.7.0) (2026-08-23)
 
 
