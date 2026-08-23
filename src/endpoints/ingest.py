@@ -71,31 +71,46 @@ async def ingest(payload: IngestRequest):
     chunk_count = 0
     billed = 0
     batches = 0
+    completed = False
 
-    async for batch in batch_embed(chunk_docs(to_ingest)):
-        await upsert_collection(
-            collection,
-            points=[
-                PointStruct(
-                    id=str(uuid4()),
-                    payload=embed.model_dump(exclude={"embedding"}),
-                    vector=embed.embedding,
-                )
-                for embed in batch.chunks
-            ],
-        )
-        billed += batch.tokens
-        batches = batch.number
-        chunk_count += len(batch.chunks)
-        # Our own count, from tiktoken, for the drift check below.
-        counted += sum(chunk.total_tokens for chunk in batch.chunks)
-
-    cost = billed / 1_000_000 * EMBEDDING_COST_PER_MILLION
-    logger.info(
-        f"ingested {len(to_ingest)} of {len(found)} documents as {chunk_count} "
-        f"chunks in {batches} batches; skipped {len(unchanged)} unchanged; "
-        f"{billed} tokens billed, ${cost:.4f}"
-    )
+    try:
+        async for batch in batch_embed(chunk_docs(to_ingest)):
+            # Money facts, true the moment the API answered. Counted before the
+            # upsert so a Qdrant failure still leaves the spend recorded.
+            billed += batch.tokens
+            batches = batch.number
+            # Our own count, from tiktoken, for the drift check below.
+            counted += sum(chunk.total_tokens for chunk in batch.chunks)
+            await upsert_collection(
+                collection,
+                points=[
+                    PointStruct(
+                        id=str(uuid4()),
+                        payload=embed.model_dump(exclude={"embedding"}),
+                        vector=embed.embedding,
+                    )
+                    for embed in batch.chunks
+                ],
+            )
+            chunk_count += len(batch.chunks)
+        completed = True
+    finally:
+        # Logging only, never a return: a return here would swallow the
+        # exception and report a dead run as a success.
+        cost = billed / 1_000_000 * EMBEDDING_COST_PER_MILLION
+        if completed:
+            logger.info(
+                f"ingested {len(to_ingest)} of {len(found)} documents as "
+                f"{chunk_count} chunks in {batches} batches; skipped "
+                f"{len(unchanged)} unchanged; {billed} tokens billed, ${cost:.4f}"
+            )
+        else:
+            # The handler logs what broke; this line is what it cost.
+            logger.warning(
+                f"ingest failed, reached batch {batches}: {billed} tokens billed, "
+                f"${cost:.4f} spent, {chunk_count} chunks indexed; the "
+                f"{len(to_ingest)} documents in flight rebuild on the next run"
+            )
 
     # Same tokeniser both sides, so these should agree exactly. Divergence
     # means TOKEN_SIZE is not a ceiling and BATCH is no longer provably safe.
