@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/manishsharma0398/documind/compare/v0.6.2...v0.6.3) (2026-08-23)
+
+
+### Bug Fixes
+
+* pair embeddings on the API's index, not on position ([#34](https://github.com/manishsharma0398/documind/issues/34)) ([2a4b666](https://github.com/manishsharma0398/documind/commit/2a4b6662dd5e2528ca0cca7339f622e554007f3d))
+
 ## [0.6.2](https://github.com/manishsharma0398/documind/compare/v0.6.1...v0.6.2) (2026-08-23)
 
 
