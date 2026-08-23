@@ -1,6 +1,9 @@
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+
+from ..settings import MAX_TOP_K
 
 
 class IngestRequest(BaseModel):
@@ -16,6 +19,28 @@ class IngestRequest(BaseModel):
     # Rebuild regardless of hash, for when the index is wrong in a way the
     # hash cannot see.
     reindex: bool = False
+
+
+class RetrieveRequest(BaseModel):
+    """A question, and how much to return for it."""
+
+    question: Annotated[str, StringConstraints(strip_whitespace=True)] = Field(
+        description="Question to be asked",
+        min_length=1,
+        max_length=1000,
+    )
+    top_k: int | None = Field(
+        description="How many top results to be fetched",
+        default=None,
+        ge=1,
+        le=MAX_TOP_K,
+    )
+    score_threshold: float | None = Field(
+        description="Fetch the results only if above this score",
+        default=None,
+        ge=0.0,
+        le=1.0,
+    )
 
 
 class Document(BaseModel):
@@ -59,3 +84,28 @@ class EmbeddedChunk(Chunk):
     """A chunk with its vector."""
 
     embedding: list[float]
+
+
+class RetrieveResult(BaseModel):
+    """One matching chunk and how close it scored."""
+
+    # Cosine similarity, so only comparable within one embedding model.
+    score: float
+    text: str
+    source: str
+    section: str | None = None
+    chunk_index: int
+
+
+class RetrieveResponse(BaseModel):
+    """The matches, plus the settings actually used to find them.
+
+    The two knobs are echoed because they fall back to `Settings` when the
+    caller omits them, and an eval run has to record what it measured against.
+    """
+
+    results: list[RetrieveResult]
+
+    # Never null: both fall back to a setting, so a value was always applied.
+    top_k: int = Field(description="How many results were fetched")
+    score_threshold: float = Field(description="Score floor applied")

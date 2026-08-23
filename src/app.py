@@ -111,6 +111,16 @@ def create_fast_api_app() -> FastAPI:
     @app.exception_handler(UnexpectedResponse)
     async def qdrant_http_error(request: Request, exc: UnexpectedResponse):
         """Qdrant answered with an error."""
+        # Nothing here reads points by id, so the only 404 we can provoke is a
+        # collection that was never ingested. Expected on a fresh deployment,
+        # so it gets no traceback.
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            logger.warning(f"collection missing for {request.url.path}")
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"detail": "index does not exist"},
+            )
+
         # A 4xx means we sent Qdrant a bad request: our bug, not the caller's,
         # and not something a retry will fix.
         if exc.status_code and exc.status_code < status.HTTP_500_INTERNAL_SERVER_ERROR:
