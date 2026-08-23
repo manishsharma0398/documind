@@ -1,6 +1,6 @@
 [project]
 name = "documind"
-version = "0.6.1"
+version = "0.6.2"
 description = "Retrieval-augmented Q&A service for large personal knowledge bases"
 readme = "README.md"
 authors = [{ name = "Manish Sharma", email = "manish.sharma0398@gmail.com" }]
