@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/manishsharma0398/documind/compare/v0.6.1...v0.6.2) (2026-08-23)
+
+
+### Bug Fixes
+
+* keep the cost record when an ingest run dies ([#31](https://github.com/manishsharma0398/documind/issues/31)) ([c12dd67](https://github.com/manishsharma0398/documind/commit/c12dd67debb87bca715d4d65ff4f6959aef22c70))
+
 ## [0.6.1](https://github.com/manishsharma0398/documind/compare/v0.6.0...v0.6.1) (2026-08-22)
 
 
