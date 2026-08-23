@@ -31,10 +31,13 @@ async def batch_embed(chunks: Iterable[Chunk]) -> AsyncIterator[EmbeddedBatch]:
     while window := list(islice(stream, BATCH)):
         number += 1
         response = await embed([c.text for c in window])
+        # The API documents data as input-ordered and ships an index on every
+        # item. Pairing on the index costs nothing and needs no such promise.
+        ordered = sorted(response.data, key=lambda item: item.index)
         yield EmbeddedBatch(
             chunks=[
                 EmbeddedChunk(**chunk.model_dump(), embedding=item.embedding)
-                for chunk, item in zip(window, response.data)
+                for chunk, item in zip(window, ordered, strict=True)
             ],
             tokens=response.usage.total_tokens,
             number=number,
