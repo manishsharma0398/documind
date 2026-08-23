@@ -38,30 +38,38 @@ naive retrieval quietly degrades.
 ## Architecture
 
 ```
-                  ┌──────────────┐
-   POST /ingest ──▶│   ingest     │──▶ chunk (token boundaries + overlap)
-                  └──────────────┘         │
-                                           ▼
-                                   batched embedding ──▶ ┌─────────┐
-                                                          │ Qdrant  │
-                                   dense + sparse vectors │ :6333   │
-                                                          └─────────┘
-                                                               ▲
-                  ┌──────────────┐                             │
-  POST /retrieve ─▶│  retrieve    │──▶ query rewrite ──▶ hybrid search
-                  └──────────────┘         │              (RRF fusion)
-                                           ▼                   │
-                                    cross-encoder rerank ◀──────┘
-                                           │
-                                           ▼
-                                  context assembly + citations
-                                           │
-                                           ▼
-                                    grounded answer
+                   ┌──────────────┐
+    POST /ingest ─▶│    ingest    │──▶ chunk (token boundaries + overlap)
+                   └──────────────┘          │
+                                             ▼
+                                     batched embedding ──▶ ┌─────────┐
+                                                           │ Qdrant  │
+                                    dense + sparse vectors │ :6333   │
+                                                           └─────────┘
+                                                                ▲
+                   ┌──────────────┐                             │
+  POST /retrieve ─▶│   retrieve   │──▶ query rewrite ──▶ hybrid search
+                   └──────────────┘          │             (RRF fusion)
+                           ▲                 ▼                  │
+                           │          cross-encoder rerank ◀────┘
+                           │                 │
+                           │                 ▼
+                    reuses │           ranked chunks + scores
+                           │
+                   ┌───────┴──────┐
+       POST /ask ─▶│     ask      │──▶ context assembly + citations
+                   └──────────────┘          │
+                                             ▼
+                                   grounded answer, or a refusal
+                                   when nothing clears the floor
 ```
 
+`/retrieve` returns ranked chunks; `/ask` reuses it and generates an answer from them.
+Keeping them apart means retrieval quality can be measured without paying for a
+completion, and a bad answer can be attributed to the right half.
+
 Dense retrieval is built end to end. Sparse vectors, query rewriting, reranking and
-answer generation are the remaining work.
+`/ask` are the remaining work.
 
 **Design decisions worth calling out:**
 
