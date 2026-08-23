@@ -1,10 +1,13 @@
+import httpx2
 from openai import AsyncOpenAI
 from openai.types import CreateEmbeddingResponse
 
 from ..settings import get_settings
 from ..utils.embedding_model import EMBEDDING_DIMENSIONS, EMBEDDING_MODEL
 
-OPENAI_TIMEOUT: float = 500
+# Generous against real embedding latency (single-digit seconds) while still
+# bounding a hung socket. Streamed completions will need a longer read.
+OPENAI_TIMEOUT = httpx2.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0)
 OPENAI_MAX_RETRIES: int = 5
 
 _openai_client: AsyncOpenAI | None = None
