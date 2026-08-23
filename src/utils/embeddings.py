@@ -3,6 +3,7 @@ from itertools import islice
 from typing import NamedTuple
 
 from ..clients.openai_client import embed
+from .embedding_model import EMBEDDING_DIMENSIONS
 from .models import Chunk, EmbeddedChunk
 
 # 256 x TOKEN_SIZE = 102k tokens, against a ~300k per-request cap. Raising
@@ -42,3 +43,22 @@ async def batch_embed(chunks: Iterable[Chunk]) -> AsyncIterator[EmbeddedBatch]:
             tokens=response.usage.total_tokens,
             number=number,
         )
+
+
+async def embed_query(text: str) -> list[float]:
+    """Embed one query, checking the API gave back what we asked for.
+
+    A short or mis-sized response would otherwise surface as an IndexError or
+    a silent dimension mismatch at query time.
+    """
+    response = await embed([text])
+    if len(response.data) != 1:
+        raise ValueError(f"expected 1 embedding, got {len(response.data)}")
+
+    vector = response.data[0].embedding
+    if len(vector) != EMBEDDING_DIMENSIONS:
+        raise ValueError(
+            f"embedding has {len(vector)} dimensions, "
+            f"collection expects {EMBEDDING_DIMENSIONS}"
+        )
+    return vector

@@ -3,12 +3,13 @@
 A retrieval-augmented Q&A service for large personal knowledge bases — ask questions
 against your own notes and get answers grounded in them, with citations.
 
-Built around a corpus of ~400 markdown documents spanning 14 technical domains, which is
+Built around a corpus of ~370 markdown documents spanning 9 technical domains, which is
 large enough that retrieval quality is a real engineering problem rather than a formality.
 
-> **Status:** ingestion works end to end — 393 documents into 5,345 chunks in about a
-> minute, and re-running costs nothing. Retrieval is not built yet. Numbers in the
-> evaluation table come from measured runs only; empty cells mean not yet measured.
+> **Status:** ingestion and search work end to end — 373 documents into 5,154 chunks in
+> about a minute, and re-running costs nothing. `/retrieve` returns ranked, cited chunks;
+> grounded answer generation is the next piece. Numbers in the evaluation table come from
+> measured runs only; empty cells mean not yet measured.
 
 ---
 
@@ -25,7 +26,7 @@ Terms with that property in this corpus:
 |---|---|
 | caching | HTTP, database, build, CDN, application, embedding |
 | retry | HTTP clients, job queues, database transactions, infrastructure provisioning |
-| health check | load balancers, container orchestration, application endpoints |
+| health check | load balancers, reverse proxies, application endpoints |
 | connection pool | databases, HTTP clients, reverse proxies |
 | rate limit | API gateways, application middleware, third-party quotas |
 
@@ -47,7 +48,7 @@ naive retrieval quietly degrades.
                                                           └─────────┘
                                                                ▲
                   ┌──────────────┐                             │
-       /retrieve ─▶│  retrieve    │──▶ query rewrite ──▶ hybrid search
+  POST /retrieve ─▶│  retrieve    │──▶ query rewrite ──▶ hybrid search
                   └──────────────┘         │              (RRF fusion)
                                            ▼                   │
                                     cross-encoder rerank ◀──────┘
@@ -59,7 +60,8 @@ naive retrieval quietly degrades.
                                     grounded answer
 ```
 
-Everything above `/retrieve` is built. The retrieval half is the next piece of work.
+Dense retrieval is built end to end. Sparse vectors, query rewriting, reranking and
+answer generation are the remaining work.
 
 **Design decisions worth calling out:**
 

@@ -6,6 +6,7 @@ from qdrant_client.models import (
     Distance,
     Filter,
     PayloadSchemaType,
+    PayloadSelector,
     PointStruct,
     ScoredPoint,
     UpdateResult,
@@ -134,10 +135,10 @@ async def upsert_collection(
 async def query_collection(
     collection_name: str,
     query: list[float],
+    with_payload: PayloadSelector | bool | list[str],
     query_filter: Filter | None = None,
     top_k: int | None = None,
     score_threshold: float | None = None,
-    with_payload: bool = True,
 ) -> list[ScoredPoint]:
     """Nearest points to `query`, optionally filtered and score-limited."""
     client = await get_qdrant_client()

@@ -1,8 +1,12 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Ceiling on results per query. Bounds the request field and the default
+# below, so a config value cannot walk past the documented API limit.
+MAX_TOP_K = 20
 
 
 class Settings(BaseSettings):
@@ -21,7 +25,11 @@ class Settings(BaseSettings):
     # production against one Qdrant), and top_k is a knob worth turning
     # without a redeploy.
     qdrant_collection: str = "docs"
-    default_top_k: int = 3
+    default_top_k: int = Field(default=3, ge=1, le=MAX_TOP_K)
+
+    # Zero until the eval picks a real floor: a baseline needs to see the
+    # whole score distribution, not a pre-filtered slice of it.
+    default_score_threshold: float = Field(default=0.0, ge=0.0, le=1.0)
 
     @field_validator("qdrant_api_key", mode="after")
     @classmethod
