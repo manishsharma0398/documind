@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/manishsharma0398/documind/compare/v0.7.1...v0.8.0) (2026-08-25)
+
+
+### Features
+
+* add the retrieval eval harness and a frozen baseline ([#40](https://github.com/manishsharma0398/documind/issues/40)) ([0a2fe53](https://github.com/manishsharma0398/documind/commit/0a2fe53520235701f41412f317a8d6229e0c84c8))
+
 ## [0.7.1](https://github.com/manishsharma0398/documind/compare/v0.7.0...v0.7.1) (2026-08-23)
 
 
