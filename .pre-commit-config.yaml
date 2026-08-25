@@ -54,7 +54,7 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
-        args: ["--max-line-length=88", "src/"]
+        args: ["--max-line-length=88", "src/", "evals/"]
 
       - id: bandit
         name: bandit
@@ -62,7 +62,7 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
-        args: ["-r", "src/"]
+        args: ["-r", "src/", "evals/"]
 
       - id: pyright
         name: pyright
