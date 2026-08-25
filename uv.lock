@@ -383,6 +383,9 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
+evals = [
+    { name = "pyyaml" },
+]
 lint = [
     { name = "bandit" },
     { name = "black" },
@@ -412,6 +415,7 @@ dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
 ]
+evals = [{ name = "pyyaml", specifier = ">=6.0.2" }]
 lint = [
     { name = "bandit", specifier = ">=1.9.4" },
     { name = "black", specifier = ">=26.3.1" },

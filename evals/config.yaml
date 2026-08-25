@@ -1,0 +1,27 @@
+# What a baseline was measured against. Scores are only comparable within one
+# embedding model, and the corpus is only what these globs leave behind, so a
+# result file without this is a number with no conditions attached.
+
+api_url: http://localhost:8000
+collection: docs
+
+# The notes repo commit the corpus was built from. It is a living repo, so
+# without this a later run measures corpus growth as retrieval improvement.
+corpus_commit: 7603139
+embedding_model: text-embedding-3-small
+
+# Deliberately the API maximum. Metrics for smaller k come from truncating the
+# same results, so one run answers hit@1 through hit@20.
+top_k: 20
+
+# Zero on purpose: floors are applied offline against recorded scores, so
+# trying a different one never costs another run.
+score_threshold: 0
+
+# The corpus itself. Changing this changes what every number here means.
+exclude:
+  - CLAUDE.md
+  - HISTORY.md
+  - "**/prompt.md"
+  - ai/resume-roadmap.md
+  - ai/07-rag-pipelines/exercises/solutions/DocuMind/docs/**

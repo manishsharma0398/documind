@@ -1,0 +1,311 @@
+# The golden set: questions, and which sources genuinely answer them.
+#
+# `expected_sources` are paths relative to INGEST_ROOT — the same value the API
+# returns as `source`. Never chunk ids; those are regenerated on every ingest.
+#
+# Write the questions from memory before looking at the corpus. Reading a chunk
+# first leaks its vocabulary into the question and flatters dense retrieval.
+# And never let /retrieve decide `expected_sources` — if it misses a document,
+# recording its miss as the truth makes the eval score itself 100% forever.
+#
+# Target mix (~30 total):
+#   factual         ~10   one document clearly answers it
+#   ambiguous-term  ~10   a term spanning domains with comparable pools;
+#                         `caching` and `retry` are the two that qualify here
+#   multi-hop        ~6   needs two documents from different areas
+#   absent           ~5   plausible, and genuinely not in the corpus
+#
+# Draw only from ai, node-learnings, js-learnings, terraform and sql. Questions
+# about AWS, Docker, K8s, Linux, CI/CD or scripting measure the corpus's holes.
+
+questions:
+  # --- example, replace or delete -------------------------------------------
+  - id: node-backpressure-01
+    type: factual
+    question: what happens when a stream writes faster than the other end reads
+    expected_sources:
+      - node-learnings/07-streams-backpressure/README.md
+      - node-learnings/07-streams-backpressure/notes.md
+      - node-learnings/07-streams-backpressure/interview.md
+    # Optional: substrings a correct answer should contain. Unused by retrieval
+    # metrics; /ask will score against these later.
+    expected_answer_contains:
+      - drain
+
+  - id: langchain-output-parsers-01
+    type: factual
+    question: how do I get a structured object back from a model instead of a string
+    expected_sources:
+      - ai/05-langchain-fundamentals/README.md
+      - ai/05-langchain-fundamentals/notes.md
+    # Optional: substrings a correct answer should contain. Unused by retrieval
+    # metrics; /ask will score against these later.
+    expected_answer_contains:
+      - langchain
+
+  - id: embeddings-what-01
+    type: factual
+    question: why do two sentences with no words in common end up close together
+    expected_sources:
+      - ai/06-vector-databases-and-embeddings/README.md
+      - ai/06-vector-databases-and-embeddings/notes.md
+    # Optional: substrings a correct answer should contain. Unused by retrieval
+    # metrics; /ask will score against these later.
+    expected_answer_contains:
+      - tokens
+      - chunks
+      - llm
+
+  - id: chunking-what-01
+    type: factual
+    question: how big should a piece of a document be before I embed it
+    expected_sources:
+      - ai/07-rag-pipelines/README.md
+      - ai/06-vector-databases-and-embeddings/README.md
+    # Optional: substrings a correct answer should contain. Unused by retrieval
+    # metrics; /ask will score against these later.
+    expected_answer_contains:
+      - RAG pipeline
+
+  - id: node-streams-01
+    type: factual
+    question: what is the difference between a readable and a writable stream
+    expected_sources:
+      - node-learnings/07-streams-backpressure/README.md
+      - node-learnings/07-streams-backpressure/notes.md
+      - node-learnings/07-streams-backpressure/interview.md
+    # Optional: substrings a correct answer should contain. Unused by retrieval
+    # metrics; /ask will score against these later.
+    expected_answer_contains:
+      - readable
+      - writable
+
+  - id: js-borrow-functions-01
+    type: factual
+    question: how do I run one object's method against a different object
+    expected_sources:
+      - js-learnings/chapter-11-functions-as-objects/README.md
+      - js-learnings/chapter-11-functions-as-objects/notes.md
+      - js-learnings/chapter-05-this-binding/README.md
+    # Optional: substrings a correct answer should contain. Unused by retrieval
+    # metrics; /ask will score against these later.
+    expected_answer_contains:
+      - call
+      - apply
+      - bind
+
+  # --- ambiguous-term ---------------------------------------------------------
+  # "cache" carries six unrelated meanings in this corpus and "index" four. Each
+  # question names one of them with enough context to be unambiguous to a human.
+  # A retriever that matches the bare term instead lands in the wrong chapter,
+  # which is the gap reranking and hybrid search are supposed to close.
+
+  - id: cache-module-01
+    type: ambiguous-term
+    question: why does requiring the same module twice not re-run its code
+    expected_sources:
+      - node-learnings/14-module-system-internals/README.md
+      - node-learnings/14-module-system-internals/notes.md
+      - node-learnings/14-module-system-internals/interview.md
+
+  - id: cache-prompt-01
+    type: ambiguous-term
+    question: does caching a prompt actually reduce what the API bills me
+    expected_sources:
+      - ai/03-llm-apis-in-production/README.md
+      - ai/03-llm-apis-in-production/notes.md
+      - ai/03-llm-apis-in-production/interview.md
+
+  - id: cache-unbounded-01
+    type: ambiguous-term
+    question: my in-memory cache keeps growing until the process dies
+    expected_sources:
+      - node-learnings/21-non-obvious-memory-leaks/README.md
+      - node-learnings/21-non-obvious-memory-leaks/interview.md
+
+  - id: cache-dns-01
+    type: ambiguous-term
+    question: what does a DNS cache miss cost on an outbound request
+    expected_sources:
+      - node-learnings/09-dns-resolution-internals/README.md
+
+  - id: cache-terragrunt-01
+    type: ambiguous-term
+    question: where does terragrunt keep its cache and when does it go stale
+    expected_sources:
+      - terraform/12-terragrunt/README.md
+
+  - id: cache-on-function-01
+    type: ambiguous-term
+    question: how do I store a function's previous results on the function itself
+    expected_sources:
+      - js-learnings/chapter-11-functions-as-objects/README.md
+      - js-learnings/chapter-11-functions-as-objects/notes.md
+
+  - id: index-sql-01
+    type: ambiguous-term
+    question: when does adding an index make writes slower
+    expected_sources:
+      - sql/14-constraints/README.md
+      - sql/14-constraints/notes.md
+      - sql/14-constraints/interview.md
+
+  - id: index-terraform-01
+    type: ambiguous-term
+    question: how do I reference the current iteration number when creating many
+      resources at once
+    expected_sources:
+      - terraform/02-hcl-language-fundamentals/README.md
+      - terraform/02-hcl-language-fundamentals/interview.md
+
+  - id: index-node-resolution-01
+    type: ambiguous-term
+    question: how does node decide which file to load when I import a directory
+    expected_sources:
+      - node-learnings/14-module-system-internals/README.md
+      - node-learnings/14-module-system-internals/notes.md
+      - node-learnings/14-module-system-internals/interview.md
+
+  - id: timeout-shutdown-01
+    type: ambiguous-term
+    question: how long should I wait for in-flight work before forcing shutdown
+    expected_sources:
+      - node-learnings/22-process-lifecycle-signals-graceful-shutdown/README.md
+      - node-learnings/22-process-lifecycle-signals-graceful-shutdown/interview.md
+
+  # --- absent -----------------------------------------------------------------
+  # Plausible for this corpus and genuinely uncovered — each topic matches zero
+  # files. Deliberately near-misses rather than nonsense: a floor that only
+  # rejects "how do I bake a cake" has not been tested by anything.
+
+  - id: absent-webpack-01
+    type: absent
+    question: how do I configure code splitting in webpack
+    expected_sources: []
+
+  - id: absent-prometheus-01
+    type: absent
+    question: how do I write a prometheus alerting rule for error rate
+    expected_sources: []
+
+  - id: absent-cassandra-01
+    type: absent
+    question: how should I choose a cassandra partition key
+    expected_sources: []
+
+  - id: absent-helm-01
+    type: absent
+    question: how do I override values in a helm chart per environment
+    expected_sources: []
+
+  - id: absent-airflow-01
+    type: absent
+    question: how do I set up task dependencies in an airflow DAG
+    expected_sources: []
+
+  # Written from chapter structure rather than memory, so phrased as problems a
+  # reader would actually hit — echoing a heading would hand the retriever its
+  # own vocabulary and flatter the score.
+
+  - id: sql-pagination-offset-01
+    type: factual
+    question: paging through a large result set gets slower the further in I go
+    expected_sources:
+      - sql/13-pagination-offset/README.md
+      - sql/13-pagination-offset/notes.md
+      - sql/13-pagination-offset/interview.md
+
+  - id: sql-null-comparison-01
+    type: factual
+    question: why does comparing a column to null never match any rows
+    expected_sources:
+      - sql/08-null-semantics-three-valued-logic/README.md
+      - sql/08-null-semantics-three-valued-logic/notes.md
+      - sql/08-null-semantics-three-valued-logic/interview.md
+
+  - id: sql-running-total-01
+    type: factual
+    question: how do I compute a running total without collapsing my rows
+    expected_sources:
+      - sql/11-window-functions/README.md
+      - sql/11-window-functions/notes.md
+      - sql/11-window-functions/interview.md
+
+  - id: terraform-secret-in-state-01
+    type: factual
+    question: marking a variable sensitive still leaves the value in state
+    expected_sources:
+      - terraform/09-ephemeral-resources/README.md
+      - terraform/09-ephemeral-resources/notes.md
+      - terraform/09-ephemeral-resources/interview.md
+
+  - id: terraform-avoid-replace-01
+    type: factual
+    question: how do I stop a resource being destroyed and recreated on every apply
+    expected_sources:
+      - terraform/04-plan-apply-behavior/README.md
+      - terraform/04-plan-apply-behavior/notes.md
+      - terraform/04-plan-apply-behavior/interview.md
+
+  - id: terraform-run-script-01
+    type: factual
+    question: how do I run a shell script on a machine terraform just created
+    expected_sources:
+      - terraform/11-provisioners/README.md
+      - terraform/11-provisioners/notes.md
+      - terraform/11-provisioners/interview.md
+
+  - id: js-this-binding-01
+    type: factual
+    question: what decides what this points to inside a function call
+    expected_sources:
+      - js-learnings/chapter-05-this-binding/README.md
+      - js-learnings/chapter-05-this-binding/notes.md
+      - js-learnings/chapter-05-this-binding/interview.md
+
+  # --- identifier -------------------------------------------------------------
+  # Half-remembered names, searched literally. Dense embeddings smear rare tokens
+  # into their topic's neighbourhood, so these are the queries BM25 exists for —
+  # and nothing else in this set tests that. Each term appears in 2-5 files, which
+  # is what gives a lexical scorer something to grip.
+
+  - id: identifier-prevent-destroy-01
+    type: identifier
+    question: what does prevent_destroy do
+    expected_sources:
+      - terraform/04-plan-apply-behavior/README.md
+      - terraform/04-plan-apply-behavior/notes.md
+      - terraform/04-plan-apply-behavior/interview.md
+
+  - id: identifier-nulls-first-01
+    type: identifier
+    question: what does NULLS FIRST change in an ORDER BY
+    expected_sources:
+      - sql/08-null-semantics-three-valued-logic/README.md
+      - sql/08-null-semantics-three-valued-logic/notes.md
+
+  - id: identifier-require-cache-01
+    type: identifier
+    question: what is require.cache and can I delete from it
+    expected_sources:
+      - node-learnings/14-module-system-internals/README.md
+
+  - id: identifier-hnsw-01
+    type: identifier
+    question: what is HNSW
+    expected_sources:
+      - ai/06-vector-databases-and-embeddings/README.md
+      - ai/06-vector-databases-and-embeddings/notes.md
+      - ai/06-vector-databases-and-embeddings/interview.md
+      - ai/07-rag-pipelines/README.md
+      - ai/07-rag-pipelines/interview.md
+
+  # The corpus name-drops logprobs rather than explaining them; what it actually
+  # answers is whether you can reach it through LangChain.
+  - id: identifier-logprobs-01
+    type: identifier
+    question: can I use logprobs through LangChain
+    expected_sources:
+      - ai/05-langchain-fundamentals/README.md
+      - ai/05-langchain-fundamentals/notes.md
+      - ai/05-langchain-fundamentals/interview.md
